@@ -3,6 +3,15 @@
 import { useState } from 'react'
 import { useUser } from '@/lib/UserContext'
 
+// Simple UUID v4 generator
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
 export function UserLogin() {
   const [name, setName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -15,9 +24,9 @@ export function UserLogin() {
     setIsLoading(true)
 
     try {
-      // Create a simple user object
+      // Create a simple user object with UUID
       const user = {
-        id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: generateUUID(),
         name: name.trim(),
         created_at: new Date().toISOString()
       }
