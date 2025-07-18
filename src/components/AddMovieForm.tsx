@@ -1,7 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useUser } from '@/lib/UserContext'
+
+interface MovieSuggestion {
+  id: string
+  title: string
+  year?: number
+  creator_name?: string
+}
 
 export function AddMovieForm() {
   const [title, setTitle] = useState('')
@@ -10,41 +18,95 @@ export function AddMovieForm() {
   const [rating, setRating] = useState<number>(0)
   const [tags, setTags] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<MovieSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedMovie, setSelectedMovie] = useState<MovieSuggestion | null>(null)
+  const { user } = useUser()
+
+  // Autocomplete für Filme
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (title.trim().length < 2) {
+        setSuggestions([])
+        setShowSuggestions(false)
+        return
+      }
+
+      try {
+        const { data: movies } = await supabase
+          .from('movies')
+          .select('id, title, year, created_by')
+          .ilike('title', `%${title.trim()}%`)
+          .limit(5)
+
+        if (movies && movies.length > 0) {
+          setSuggestions(movies.map(movie => ({
+            id: movie.id,
+            title: movie.title,
+            year: movie.year,
+            creator_name: movie.created_by
+          })))
+          setShowSuggestions(true)
+        } else {
+          setSuggestions([])
+          setShowSuggestions(false)
+        }
+      } catch (error) {
+        console.error('Error fetching suggestions:', error)
+      }
+    }
+
+    const timer = setTimeout(fetchSuggestions, 300)
+    return () => clearTimeout(timer)
+  }, [title])
+
+  const handleSuggestionClick = (suggestion: MovieSuggestion) => {
+    setSelectedMovie(suggestion)
+    setTitle(suggestion.title)
+    setYear(suggestion.year?.toString() || '')
+    setShowSuggestions(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      // Check if movie already exists
-      const { data: existingMovies } = await supabase
-        .from('movies')
-        .select('*')
-        .ilike('title', title.trim())
-
       let movieId: string
 
-      if (existingMovies && existingMovies.length > 0) {
-        // Movie exists, use existing ID
-        movieId = existingMovies[0].id as string
+      if (selectedMovie) {
+        // Use existing movie
+        movieId = selectedMovie.id
         console.log('Film existiert bereits, füge Tags/Bewertung hinzu')
       } else {
-        // Create new movie
-        const { data: newMovie, error: movieError } = await supabase
+        // Check if movie already exists (case-insensitive)
+        const { data: existingMovies } = await supabase
           .from('movies')
-          .insert([
-            {
-              title: title.trim(),
-              description: description.trim() || null,
-              year: year ? parseInt(year) : null,
-            },
-          ])
-          .select()
-          .single()
+          .select('*')
+          .ilike('title', title.trim())
 
-        if (movieError) throw movieError
-        movieId = newMovie.id
-        console.log('Neuer Film erstellt')
+        if (existingMovies && existingMovies.length > 0) {
+          movieId = existingMovies[0].id as string
+          console.log('Film existiert bereits, füge Tags/Bewertung hinzu')
+        } else {
+          // Create new movie
+          const { data: newMovie, error: movieError } = await supabase
+            .from('movies')
+            .insert([
+              {
+                title: title.trim(),
+                description: description.trim() || null,
+                year: year ? parseInt(year) : null,
+                created_by: user?.name || 'Unbekannt',
+              },
+            ])
+            .select()
+            .single()
+
+          if (movieError) throw movieError
+          movieId = newMovie.id
+          console.log('Neuer Film erstellt')
+        }
       }
 
       // Add rating if provided
@@ -55,6 +117,8 @@ export function AddMovieForm() {
             {
               movie_id: movieId,
               rating: rating,
+              user_id: user?.id,
+              user_name: user?.name,
             },
           ])
 
@@ -63,11 +127,11 @@ export function AddMovieForm() {
 
       // Add tags if provided
       if (tags.trim()) {
-        const tagList = tags.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag)
+        const tagNames = tags.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean)
         
-        for (const tagName of tagList) {
-          // Create tag if it doesn't exist
-          const { data: existingTag } = await supabase
+        for (const tagName of tagNames) {
+          // Check if tag exists
+          let { data: existingTag } = await supabase
             .from('tags')
             .select('*')
             .eq('name', tagName)
@@ -78,9 +142,13 @@ export function AddMovieForm() {
           if (existingTag) {
             tagId = existingTag.id
           } else {
+            // Create new tag
+            const colors = ['#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#10B981', '#7C3AED']
+            const randomColor = colors[Math.floor(Math.random() * colors.length)]
+            
             const { data: newTag, error: tagError } = await supabase
               .from('tags')
-              .insert([{ name: tagName }])
+              .insert([{ name: tagName, color: randomColor }])
               .select()
               .single()
 
@@ -89,7 +157,7 @@ export function AddMovieForm() {
           }
 
           // Link movie to tag
-          const { error: linkError } = await supabase
+          await supabase
             .from('movie_tags')
             .insert([
               {
@@ -97,10 +165,6 @@ export function AddMovieForm() {
                 tag_id: tagId,
               },
             ])
-
-          if (linkError && !linkError.message.includes('duplicate key')) {
-            throw linkError
-          }
         }
       }
 
@@ -110,8 +174,11 @@ export function AddMovieForm() {
       setYear('')
       setRating(0)
       setTags('')
+      setSelectedMovie(null)
+      setSuggestions([])
+      setShowSuggestions(false)
       
-      // Refresh page to show changes
+      // Refresh the page to show updated data
       window.location.reload()
     } catch (error) {
       console.error('Error adding movie:', error)
@@ -121,43 +188,55 @@ export function AddMovieForm() {
     }
   }
 
-  const renderStars = () => {
-    return Array.from({ length: 5 }, (_, index) => {
-      const starValue = index + 1
-      return (
-        <button
-          key={index}
-          type="button"
-          onClick={() => setRating(starValue)}
-          className={`text-2xl hover:text-yellow-400 cursor-pointer transition-colors ${
-            starValue <= rating ? 'text-yellow-400' : 'text-gray-300'
-          }`}
-        >
-          ★
-        </button>
-      )
-    })
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-          Film-Titel *
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Title with Autocomplete */}
+      <div className="relative">
+        <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+          Filmtitel *
         </label>
         <input
           type="text"
           id="title"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            setSelectedMovie(null)
+          }}
+          onBlur={() => {
+            // Hide suggestions after a short delay
+            setTimeout(() => setShowSuggestions(false), 200)
+          }}
+          onFocus={() => {
+            if (suggestions.length > 0) setShowSuggestions(true)
+          }}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="z.B. Mulholland Drive"
           required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="z.B. Inception"
         />
+        
+        {/* Autocomplete Dropdown */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+            {suggestions.map((suggestion) => (
+              <div
+                key={suggestion.id}
+                onClick={() => handleSuggestionClick(suggestion)}
+                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+              >
+                <div className="font-medium text-gray-900">{suggestion.title}</div>
+                <div className="text-sm text-gray-500">
+                  {suggestion.year && `${suggestion.year} • `}
+                  {suggestion.creator_name && `von ${suggestion.creator_name}`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
           Beschreibung
         </label>
         <textarea
@@ -165,14 +244,14 @@ export function AddMovieForm() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Kurze Beschreibung..."
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Kurze Beschreibung des Films..."
         />
       </div>
 
       <div>
-        <label htmlFor="year" className="block text-sm font-medium text-gray-700 mb-1">
-          Jahr
+        <label htmlFor="year" className="block text-sm font-medium text-gray-700">
+          Erscheinungsjahr
         </label>
         <input
           type="number"
@@ -181,44 +260,50 @@ export function AddMovieForm() {
           onChange={(e) => setYear(e.target.value)}
           min="1900"
           max="2030"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="z.B. 2010"
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="z.B. 2023"
         />
       </div>
 
+      {/* Rating */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Deine Bewertung
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Bewertung
         </label>
-        <div className="flex gap-1">
-          {renderStars()}
+        <div className="flex space-x-1">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              type="button"
+              onClick={() => setRating(star)}
+              className={`w-8 h-8 ${
+                star <= rating ? 'text-yellow-400' : 'text-gray-300'
+              } hover:text-yellow-400 transition-colors`}
+            >
+              ★
+            </button>
+          ))}
         </div>
-        {rating > 0 && (
-          <p className="text-sm text-gray-500 mt-1">{rating} von 5 Sternen</p>
-        )}
       </div>
 
       <div>
-        <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
-          Tags (kommagetrennt)
+        <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
+          Tags (durch Komma getrennt)
         </label>
         <input
           type="text"
           id="tags"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="z.B. mindblow, sci-fi, komplexe-handlung"
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="z.B. thriller, mindblow, klassiker"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Mehrere Tags mit Komma trennen
-        </p>
       </div>
 
       <button
         type="submit"
-        disabled={isLoading || !title.trim()}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        disabled={isLoading}
+        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isLoading ? 'Wird hinzugefügt...' : 'Film hinzufügen'}
       </button>
