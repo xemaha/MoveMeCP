@@ -25,36 +25,3 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'your-project-url' || su
 }
 
 export { supabase }
-
-// Export types for backwards compatibility
-export interface Movie {
-  id: string
-  title: string
-  description?: string
-  year?: number
-  poster_url?: string
-  created_by?: string
-  created_at: string
-}
-
-export interface Rating {
-  id: string
-  movie_id: string
-  rating: number
-  user_id?: string
-  user_name?: string
-  created_at: string
-}
-
-export interface Tag {
-  id: string
-  name: string
-  color: string
-  created_at: string
-}
-
-export interface User {
-  id: string
-  name: string
-  created_at: string
-}
