@@ -3,7 +3,7 @@
 import { MovieList } from '@/components/MovieList'
 import { AddMovieForm } from '@/components/AddMovieForm'
 import { UserProvider, useUser } from '@/lib/UserContext'
-import { UserLogin } from '@/components/UserLogin'
+import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'
 
 function AppContent() {
@@ -21,7 +21,7 @@ function AppContent() {
   }
 
   if (!user) {
-    return <UserLogin />
+    return <AuthForm />
   }
 
   return (
