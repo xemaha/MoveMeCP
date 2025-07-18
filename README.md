@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎬 MoveMe - Film Bewertungs-App
 
-## Getting Started
+Eine moderne Web-App zum Bewerten und Taggen von Filmen, entwickelt mit Next.js und Supabase.
 
-First, run the development server:
+## ✨ Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- 🎥 Filme zur Datenbank hinzufügen
+- ⭐ Filme bewerten (1-5 Sterne)
+- 🏷️ Filme mit Tags kategorisieren
+- 📊 Durchschnittsbewertungen anzeigen
+- 💾 Persistente Speicherung mit Supabase
+- 📱 Responsive Design mit Tailwind CSS
+
+## 🚀 Setup
+
+### 1. Supabase Projekt erstellen
+
+1. Gehe zu [supabase.com](https://supabase.com)
+2. Klicke auf "Start your project"
+3. Registriere dich mit deiner E-Mail (keine Kreditkarte nötig!)
+4. Erstelle ein neues Projekt
+5. Warte bis das Projekt bereit ist
+
+### 2. Datenbank einrichten
+
+1. Gehe zu deinem Supabase Dashboard
+2. Klicke auf "SQL Editor" in der Seitenleiste
+3. Kopiere den Inhalt von `supabase/schema.sql` 
+4. Füge ihn in den SQL Editor ein und führe ihn aus
+
+### 3. Umgebungsvariablen konfigurieren
+
+1. Kopiere die Supabase URL und den anon key aus deinem Dashboard
+2. Bearbeite die `.env.local` Datei:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=deine-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=dein-anon-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. Abhängigkeiten installieren und starten
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Die App läuft dann auf [http://localhost:3000](http://localhost:3000)
 
-## Learn More
+## 🔧 Verwendete Technologien
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend**: Next.js 15 mit App Router
+- **Backend**: Next.js API Routes
+- **Datenbank**: Supabase (PostgreSQL)
+- **Styling**: Tailwind CSS
+- **Sprache**: TypeScript
+- **Hosting**: Vercel (kostenlos)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📦 Deployment auf Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Pushe dein Projekt zu GitHub
+2. Gehe zu [vercel.com](https://vercel.com)
+3. Importiere dein GitHub Repository
+4. Füge die Umgebungsvariablen hinzu
+5. Deploy!
 
-## Deploy on Vercel
+## 🎯 Nächste Features
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- 🔐 Benutzer-Authentication
+- 🏷️ Tag-Management System
+- 🔍 Erweiterte Suchfunktionen
+- 📷 Poster-Upload
+- 📈 Statistiken und Diagramme
+- 💬 Kommentare und Reviews
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📝 Lizenz
+
+MIT License - siehe [LICENSE](LICENSE) für Details.
