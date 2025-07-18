@@ -38,7 +38,7 @@ export function MovieList() {
 
       // Fetch ratings and tags for each movie
       const moviesWithDetails = await Promise.all(
-        moviesData.map(async (movie: any) => {
+        moviesData.map(async (movie: Movie) => {
           // Get ratings
           const { data: ratings } = await supabase
             .from('ratings')
@@ -57,9 +57,9 @@ export function MovieList() {
             `)
             .eq('movie_id', movie.id)
 
-          const tags = movieTags?.map((mt: any) => mt.tags).filter(Boolean) || []
+          const tags = movieTags?.map((mt: { tags: Tag }) => mt.tags).filter(Boolean) || []
           const averageRating = ratings && ratings.length > 0 
-            ? ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length 
+            ? ratings.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / ratings.length 
             : 0
           const ratingCount = ratings?.length || 0
 
@@ -197,7 +197,7 @@ export function MovieList() {
       {/* Results Info */}
       {searchQuery && (
         <div className="text-sm text-gray-600 mb-4">
-          {filteredMovies.length} {filteredMovies.length === 1 ? 'Film' : 'Filme'} gefunden für "{searchQuery}"
+          {filteredMovies.length} {filteredMovies.length === 1 ? 'Film' : 'Filme'} gefunden für &quot;{searchQuery}&quot;
         </div>
       )}
 

@@ -103,7 +103,7 @@ export function MovieSearch({ onSearch, onTagFilter }: MovieSearchProps) {
       {/* Clear Search */}
       {searchQuery && (
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Suche nach: "{searchQuery}"</span>
+          <span className="text-sm text-gray-600">Suche nach: &quot;{searchQuery}&quot;</span>
           <button
             onClick={() => {
               setSearchQuery('')

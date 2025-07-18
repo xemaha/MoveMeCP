@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase, Movie, Rating } from '@/lib/supabase'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase, Movie } from '@/lib/supabase'
 
 interface MovieCardProps {
   movie: Movie
@@ -12,11 +12,7 @@ export function MovieCard({ movie }: MovieCardProps) {
   const [averageRating, setAverageRating] = useState<number>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchRatings()
-  }, [movie.id])
-
-  const fetchRatings = async () => {
+  const fetchRatings = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('ratings')
@@ -26,13 +22,17 @@ export function MovieCard({ movie }: MovieCardProps) {
       if (error) throw error
 
       if (data && data.length > 0) {
-        const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length
+        const avg = data.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / data.length
         setAverageRating(avg)
       }
     } catch (error) {
       console.error('Error fetching ratings:', error)
     }
-  }
+  }, [movie.id])
+
+  useEffect(() => {
+    fetchRatings()
+  }, [fetchRatings])
 
   const handleRating = async (newRating: number) => {
     setIsSubmitting(true)

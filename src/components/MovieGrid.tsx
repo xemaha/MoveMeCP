@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase, Movie, Rating, Tag } from '@/lib/supabase'
+import { supabase, Movie, Tag } from '@/lib/supabase'
 
 interface MovieWithDetails extends Movie {
   tags: Tag[]
@@ -197,7 +197,7 @@ export function MovieGrid() {
       {/* Results Info */}
       {searchQuery && (
         <div className="text-sm text-gray-600 mb-4">
-          {filteredMovies.length} {filteredMovies.length === 1 ? 'Film' : 'Filme'} gefunden für "{searchQuery}"
+          {filteredMovies.length} {filteredMovies.length === 1 ? 'Film' : 'Filme'} gefunden für &quot;{searchQuery}&quot;
         </div>
       )}
 
