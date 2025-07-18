@@ -7,14 +7,14 @@ import { useUser } from '@/lib/UserContext'
 interface MovieSuggestion {
   id: string
   title: string
-  year?: number
+  content_type: string
   creator_name?: string
 }
 
 export function AddMovieForm() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [year, setYear] = useState('')
+  const [contentType, setContentType] = useState('film')
   const [rating, setRating] = useState<number>(0)
   const [tags, setTags] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -33,26 +33,37 @@ export function AddMovieForm() {
       }
 
       try {
-        const { data: movies } = await supabase
+        const { data: movies, error } = await supabase
           .from('movies')
-          .select('id, title, year, created_by')
+          .select('id, title, content_type, created_by')
           .ilike('title', `%${title.trim()}%`)
           .limit(5)
 
+        if (error) {
+          console.error('Supabase error:', error)
+          setSuggestions([])
+          setShowSuggestions(false)
+          return
+        }
+
         if (movies && movies.length > 0) {
+          console.log('Found movies:', movies)
           setSuggestions(movies.map(movie => ({
-            id: movie.id,
-            title: movie.title,
-            year: movie.year,
-            creator_name: movie.created_by
+            id: movie.id as string,
+            title: movie.title as string,
+            content_type: movie.content_type as string,
+            creator_name: movie.created_by as string || 'Unbekannt'
           })))
           setShowSuggestions(true)
         } else {
+          console.log('No movies found for:', title)
           setSuggestions([])
           setShowSuggestions(false)
         }
       } catch (error) {
         console.error('Error fetching suggestions:', error)
+        setSuggestions([])
+        setShowSuggestions(false)
       }
     }
 
@@ -63,7 +74,7 @@ export function AddMovieForm() {
   const handleSuggestionClick = (suggestion: MovieSuggestion) => {
     setSelectedMovie(suggestion)
     setTitle(suggestion.title)
-    setYear(suggestion.year?.toString() || '')
+    setContentType(suggestion.content_type)
     setShowSuggestions(false)
   }
 
@@ -77,7 +88,7 @@ export function AddMovieForm() {
       if (selectedMovie) {
         // Use existing movie
         movieId = selectedMovie.id
-        console.log('Film existiert bereits, füge Tags/Bewertung hinzu')
+        console.log('Eintrag existiert bereits, füge Tags/Bewertung hinzu')
       } else {
         // Check if movie already exists (case-insensitive)
         const { data: existingMovies } = await supabase
@@ -87,7 +98,7 @@ export function AddMovieForm() {
 
         if (existingMovies && existingMovies.length > 0) {
           movieId = existingMovies[0].id as string
-          console.log('Film existiert bereits, füge Tags/Bewertung hinzu')
+          console.log('Eintrag existiert bereits, füge Tags/Bewertung hinzu')
         } else {
           // Create new movie
           const { data: newMovie, error: movieError } = await supabase
@@ -96,16 +107,20 @@ export function AddMovieForm() {
               {
                 title: title.trim(),
                 description: description.trim() || null,
-                year: year ? parseInt(year) : null,
+                content_type: contentType,
                 created_by: user?.name || 'Unbekannt',
               },
             ])
             .select()
             .single()
 
-          if (movieError) throw movieError
-          movieId = newMovie.id
-          console.log('Neuer Film erstellt')
+          if (movieError) {
+            console.error('Movie creation error:', movieError)
+            throw new Error(`Fehler beim Erstellen des Eintrags: ${movieError.message || movieError.details || 'Unbekannter Datenbankfehler'}`)
+          }
+          
+          movieId = newMovie.id as string
+          console.log('Neuer Eintrag erstellt')
         }
       }
 
@@ -122,7 +137,10 @@ export function AddMovieForm() {
             },
           ])
 
-        if (ratingError) throw ratingError
+        if (ratingError) {
+          console.error('Rating creation error:', ratingError)
+          throw new Error(`Fehler beim Hinzufügen der Bewertung: ${ratingError.message || ratingError.details || 'Unbekannter Datenbankfehler'}`)
+        }
       }
 
       // Add tags if provided
@@ -130,48 +148,66 @@ export function AddMovieForm() {
         const tagNames = tags.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean)
         
         for (const tagName of tagNames) {
-          // Check if tag exists
-          let { data: existingTag } = await supabase
-            .from('tags')
-            .select('*')
-            .eq('name', tagName)
-            .single()
-
-          let tagId: string
-
-          if (existingTag) {
-            tagId = existingTag.id
-          } else {
-            // Create new tag
-            const colors = ['#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#10B981', '#7C3AED']
-            const randomColor = colors[Math.floor(Math.random() * colors.length)]
-            
-            const { data: newTag, error: tagError } = await supabase
+          try {
+            // Check if tag exists
+            let { data: existingTag, error: tagSearchError } = await supabase
               .from('tags')
-              .insert([{ name: tagName, color: randomColor }])
-              .select()
+              .select('*')
+              .eq('name', tagName)
               .single()
 
-            if (tagError) throw tagError
-            tagId = newTag.id
-          }
+            let tagId: string
 
-          // Link movie to tag
-          await supabase
-            .from('movie_tags')
-            .insert([
-              {
-                movie_id: movieId,
-                tag_id: tagId,
-              },
-            ])
+            if (existingTag) {
+              tagId = existingTag.id as string
+              console.log(`Tag "${tagName}" existiert bereits`)
+            } else {
+              // Create new tag
+              const colors = ['#EF4444', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#10B981', '#7C3AED']
+              const randomColor = colors[Math.floor(Math.random() * colors.length)]
+              
+              const { data: newTag, error: tagError } = await supabase
+                .from('tags')
+                .insert([{ name: tagName, color: randomColor }])
+                .select()
+                .single()
+
+              if (tagError) {
+                console.error(`Fehler beim Erstellen des Tags "${tagName}":`, tagError)
+                throw new Error(`Fehler beim Erstellen des Tags "${tagName}": ${tagError.message || tagError.details || 'Unbekannter Fehler'}`)
+              }
+              
+              tagId = newTag.id as string
+              console.log(`Neuer Tag "${tagName}" erstellt`)
+            }
+
+            // Link movie to tag
+            const { error: linkError } = await supabase
+              .from('movie_tags')
+              .insert([
+                {
+                  movie_id: movieId,
+                  tag_id: tagId,
+                },
+              ])
+
+            if (linkError) {
+              console.error(`Fehler beim Verknüpfen des Tags "${tagName}":`, linkError)
+              throw new Error(`Fehler beim Verknüpfen des Tags "${tagName}": ${linkError.message || linkError.details || 'Unbekannter Fehler'}`)
+            }
+            
+            console.log(`Tag "${tagName}" erfolgreich verknüpft`)
+          } catch (tagProcessError) {
+            console.error(`Fehler beim Verarbeiten des Tags "${tagName}":`, tagProcessError)
+            // Continue with other tags even if one fails
+          }
         }
       }
 
       // Reset form
       setTitle('')
       setDescription('')
-      setYear('')
+      setContentType('film')
       setRating(0)
       setTags('')
       setSelectedMovie(null)
@@ -182,7 +218,25 @@ export function AddMovieForm() {
       window.location.reload()
     } catch (error) {
       console.error('Error adding movie:', error)
-      alert('Fehler beim Hinzufügen des Films')
+      
+      let errorMessage = 'Unbekannter Fehler'
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'object' && error !== null) {
+        // Handle Supabase errors
+        if ('message' in error) {
+          errorMessage = String(error.message)
+        } else if ('details' in error) {
+          errorMessage = String(error.details)
+        } else {
+          errorMessage = JSON.stringify(error)
+        }
+      } else {
+        errorMessage = String(error)
+      }
+      
+      alert(`Fehler beim Hinzufügen: ${errorMessage}`)
     } finally {
       setIsLoading(false)
     }
@@ -193,7 +247,7 @@ export function AddMovieForm() {
       {/* Title with Autocomplete */}
       <div className="relative">
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-          Filmtitel *
+          Titel *
         </label>
         <input
           type="text"
@@ -226,7 +280,9 @@ export function AddMovieForm() {
               >
                 <div className="font-medium text-gray-900">{suggestion.title}</div>
                 <div className="text-sm text-gray-500">
-                  {suggestion.year && `${suggestion.year} • `}
+                  <span className="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2">
+                    {suggestion.content_type}
+                  </span>
                   {suggestion.creator_name && `von ${suggestion.creator_name}`}
                 </div>
               </div>
@@ -249,20 +305,22 @@ export function AddMovieForm() {
         />
       </div>
 
+      {/* Content Type */}
       <div>
-        <label htmlFor="year" className="block text-sm font-medium text-gray-700">
-          Erscheinungsjahr
+        <label htmlFor="contentType" className="block text-sm font-medium text-gray-700">
+          Typ *
         </label>
-        <input
-          type="number"
-          id="year"
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-          min="1900"
-          max="2030"
+        <select
+          id="contentType"
+          value={contentType}
+          onChange={(e) => setContentType(e.target.value)}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="z.B. 2023"
-        />
+          required
+        >
+          <option value="film">🎬 Film</option>
+          <option value="buch">📚 Buch</option>
+          <option value="serie">📺 Serie</option>
+        </select>
       </div>
 
       {/* Rating */}
@@ -305,7 +363,7 @@ export function AddMovieForm() {
         disabled={isLoading}
         className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Wird hinzugefügt...' : 'Film hinzufügen'}
+        {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
       </button>
     </form>
   )

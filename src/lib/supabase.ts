@@ -31,6 +31,7 @@ export interface Movie {
   id: string
   title: string
   description?: string
+  content_type?: string
   year?: number
   poster_url?: string
   created_by?: string

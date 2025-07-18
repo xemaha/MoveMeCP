@@ -3,8 +3,7 @@ CREATE TABLE IF NOT EXISTS movies (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   description TEXT,
-  year INTEGER,
-  poster_url TEXT,
+  content_type VARCHAR(50) DEFAULT 'film' CHECK (content_type IN ('film', 'buch', 'serie')),
   created_by VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
