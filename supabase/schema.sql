@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS movies (
   description TEXT,
   year INTEGER,
   poster_url TEXT,
+  created_by VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -13,7 +14,8 @@ CREATE TABLE IF NOT EXISTS ratings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   movie_id UUID NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
   rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  user_id UUID, -- For future user system
+  user_id VARCHAR(255),
+  user_name VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
