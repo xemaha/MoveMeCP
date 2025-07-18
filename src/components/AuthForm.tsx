@@ -12,33 +12,31 @@ function hashString(str: string): string {
 
 export default function AuthForm() {
 
+
   const [name, setName] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Beim Namenwechsel: user_id aus LocalStorage laden (falls vorhanden)
+  // user_id sofort nach Namenseingabe setzen und im LocalStorage speichern
   useEffect(() => {
-    if (name.trim()) {
-      const key = `guest_user_id_${name.trim().toLowerCase()}`;
-      const storedId = localStorage.getItem(key);
-      if (storedId) {
-        setUserId(storedId);
-      } else {
-        setUserId(null);
+    const cleanName = name.trim().toLowerCase();
+    if (cleanName) {
+      const key = `guest_user_id_${cleanName}`;
+      let storedId = localStorage.getItem(key);
+      if (!storedId) {
+        storedId = hashString(cleanName);
+        localStorage.setItem(key, storedId);
       }
+      setUserId(storedId);
     } else {
       setUserId(null);
     }
   }, [name]);
 
 
+  // Login-Button ist jetzt optional, aber bleibt für UX
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim()) {
-      const key = `guest_user_id_${name.trim().toLowerCase()}`;
-      const id = hashString(name.trim().toLowerCase());
-      localStorage.setItem(key, id);
-      setUserId(id);
-    }
+    // Kein weiterer Code nötig, da userId schon gesetzt wird
   };
 
   return (
@@ -49,11 +47,13 @@ export default function AuthForm() {
           type="text"
           placeholder="Name eingeben..."
           value={name}
-          onChange={e => setName(e.target.value.toLowerCase())}
+          onChange={e => setName(e.target.value.replace(/[^a-z0-9]/g, "").toLowerCase())}
           className="border rounded p-2"
           required
           style={{ textTransform: "lowercase" }}
           autoComplete="off"
+          pattern="[a-z0-9]*"
+          inputMode="lowercase"
         />
         <button
           type="submit"
@@ -64,7 +64,7 @@ export default function AuthForm() {
       </form>
       {userId && (
         <div className="mt-4 flex flex-col items-center">
-          <p className="text-gray-600">Deine User-ID für "{name}":</p>
+          <p className="text-gray-600">Deine User-ID für "{name.trim().toLowerCase()}":</p>
           <code className="bg-gray-100 p-2 rounded">{userId}</code>
           <p className="text-xs text-gray-400 mt-2">Gleicher Name ergibt immer die gleiche ID – überall.</p>
         </div>
