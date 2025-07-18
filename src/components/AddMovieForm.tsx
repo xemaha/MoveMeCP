@@ -26,7 +26,7 @@ export function AddMovieForm() {
 
       if (existingMovies && existingMovies.length > 0) {
         // Movie exists, use existing ID
-        movieId = existingMovies[0].id
+        movieId = existingMovies[0].id as string
         console.log('Film existiert bereits, füge Tags/Bewertung hinzu')
       } else {
         // Create new movie
