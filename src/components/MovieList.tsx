@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase, Movie, Tag } from '@/lib/supabase'
-import { DeleteMovieButton } from '@/components/DeleteButtons'
+import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { useUser } from '@/lib/UserContext'
 
 interface Rating {
@@ -48,6 +48,8 @@ export function MovieList() {
     buch: true,
     serie: true
   })
+  const [viewMode, setViewMode] = useState<'movie-based' | 'tag-based'>('movie-based')
+  const [selectedMovieForEdit, setSelectedMovieForEdit] = useState<MovieWithDetails | null>(null)
   const { user } = useUser()
 
   useEffect(() => {
@@ -56,26 +58,73 @@ export function MovieList() {
     fetchAllTags()
   }, [])
 
-  // Get available tags based on current content type filter
-  const availableTagsForContentType = allTags.filter(tag => {
-    // Check if this tag is used by any movie of the currently selected content types
-    return movies.some(movie => {
-      const movieMatchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-      const movieHasTag = movie.tags.some(movieTag => movieTag.name === tag.name)
-      return movieMatchesContentType && movieHasTag
+  // Get available tags based on current filters (content type, user ratings, search)
+  const availableTagsForCurrentFilters = allTags.filter(tag => {
+    // Get movies that match current filters (excluding tag filter)
+    const filteredMovies = movies.filter(movie => {
+      // Text search filter
+      const matchesSearch = searchQuery === '' || 
+        movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        movie.description?.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Content type filter
+      const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+
+      // User rating filter
+      let matchesUserFilter = true
+      if (userFilter.userName) {
+        const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+        if (!userRating) {
+          matchesUserFilter = false
+        } else {
+          matchesUserFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+        }
+      }
+
+      return matchesSearch && matchesContentType && matchesUserFilter
     })
+
+    // Check if this tag is used by any of the filtered movies
+    return filteredMovies.some(movie => {
+      return movie.tags.some(movieTag => movieTag.name === tag.name)
+    })
+  }).map(tag => {
+    // Add count of how many movies have this tag
+    const filteredMovies = movies.filter(movie => {
+      // Apply all filters except tag filter
+      const matchesSearch = searchQuery === '' || 
+        movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        movie.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+      let matchesUserFilter = true
+      if (userFilter.userName) {
+        const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+        if (!userRating) {
+          matchesUserFilter = false
+        } else {
+          matchesUserFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+        }
+      }
+      return matchesSearch && matchesContentType && matchesUserFilter
+    })
+
+    const count = filteredMovies.filter(movie => 
+      movie.tags.some(movieTag => movieTag.name === tag.name)
+    ).length
+
+    return { ...tag, count }
   })
 
-  // Clear selected tags that are no longer available when content type filter changes
+  // Clear selected tags that are no longer available when filters change
   useEffect(() => {
     if (selectedTags.length > 0) {
-      const availableTagNames = availableTagsForContentType.map(tag => tag.name)
+      const availableTagNames = availableTagsForCurrentFilters.map(tag => tag.name)
       const validSelectedTags = selectedTags.filter(tagName => availableTagNames.includes(tagName))
       if (validSelectedTags.length !== selectedTags.length) {
         setSelectedTags(validSelectedTags)
       }
     }
-  }, [contentTypeFilter, availableTagsForContentType, selectedTags])
+  }, [contentTypeFilter, userFilter, searchQuery, availableTagsForCurrentFilters, selectedTags])
 
   const fetchAllTags = async () => {
     try {
@@ -245,6 +294,32 @@ export function MovieList() {
     setSelectedTags([])
   }
 
+  // Prepare data for tag-based view
+  const getTagBasedData = () => {
+    const tagGroups: { [tagName: string]: { tag: Tag; movies: MovieWithDetails[] } } = {}
+    
+    filteredMovies.forEach(movie => {
+      movie.tags.forEach(tag => {
+        if (!tagGroups[tag.name]) {
+          tagGroups[tag.name] = {
+            tag: tag,
+            movies: []
+          }
+        }
+        tagGroups[tag.name].movies.push(movie)
+      })
+    })
+
+    // Sort tags alphabetically
+    return Object.entries(tagGroups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([tagName, data]) => ({
+        tagName,
+        tag: data.tag,
+        movies: data.movies.sort((a, b) => a.title.localeCompare(b.title))
+      }))
+  }
+
   const handleContentTypeToggle = (contentType: keyof ContentTypeFilter) => {
     setContentTypeFilter(prev => ({
       ...prev,
@@ -307,8 +382,39 @@ export function MovieList() {
         }
       }
 
-      // Refresh movie data
-      await fetchMoviesWithDetails()
+      // Update the local state optimistically (without full reload)
+      setMovies(prevMovies => prevMovies.map(movie => {
+        if (movie.id === movieId) {
+          // Update or add the rating
+          const existingRatingIndex = movie.ratings.findIndex(r => r.user_id === user.id)
+          let updatedRatings = [...movie.ratings]
+          
+          if (existingRatingIndex >= 0) {
+            // Update existing rating
+            updatedRatings[existingRatingIndex] = { ...updatedRatings[existingRatingIndex], rating }
+          } else {
+            // Add new rating
+            updatedRatings.push({ rating, user_name: user.name, user_id: user.id })
+          }
+
+          // Recalculate average rating
+          const averageRating = updatedRatings.length > 0
+            ? updatedRatings.reduce((sum, r) => sum + r.rating, 0) / updatedRatings.length
+            : 0
+
+          return {
+            ...movie,
+            ratings: updatedRatings,
+            averageRating,
+            ratingCount: updatedRatings.length
+          }
+        }
+        return movie
+      }))
+
+      // Show success feedback
+      console.log('Bewertung erfolgreich gespeichert!')
+      
     } catch (error) {
       console.error('Error handling rating:', error)
       alert('Fehler beim Verarbeiten der Bewertung')
@@ -342,6 +448,39 @@ export function MovieList() {
 
   return (
     <div className="space-y-6">
+      {/* View Mode Toggle and Refresh Button */}
+      <div className="flex justify-center items-center gap-4">
+        <div className="bg-gray-100 rounded-lg p-1 flex">
+          <button
+            onClick={() => setViewMode('movie-based')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'movie-based'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            📽️ Nach Items
+          </button>
+          <button
+            onClick={() => setViewMode('tag-based')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewMode === 'tag-based'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            🏷️ Nach Tags
+          </button>
+        </div>
+        <button
+          onClick={fetchMoviesWithDetails}
+          disabled={isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isLoading ? '� Speichert...' : '� Speichern'}
+        </button>
+      </div>
+
       {/* Search and Filter Controls */}
       <div className="space-y-4">
         {/* Search Bar */}
@@ -467,7 +606,7 @@ export function MovieList() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {availableTagsForContentType.map((tag) => (
+            {availableTagsForCurrentFilters.map((tag) => (
               <button
                 key={tag.id}
                 onClick={() => handleTagClick(tag.name)}
@@ -479,15 +618,16 @@ export function MovieList() {
                 style={{ backgroundColor: tag.color }}
               >
                 {tag.name}
+                <span className="ml-1 text-xs opacity-75">({tag.count})</span>
                 {selectedTags.includes(tag.name) && (
                   <span className="ml-1 text-xs">✓</span>
                 )}
               </button>
             ))}
           </div>
-          {availableTagsForContentType.length === 0 && (
+          {availableTagsForCurrentFilters.length === 0 && (
             <p className="text-sm text-gray-500 italic">
-              Keine Tags für die ausgewählten Content-Types verfügbar
+              Keine Tags für die ausgewählten Filter verfügbar
             </p>
           )}
           {selectedTags.length > 0 && (
@@ -505,14 +645,19 @@ export function MovieList() {
         {filteredMovies.length} {filteredMovies.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
       </div>
 
-      {/* Movies Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Conditional View Based on Mode */}
+      {viewMode === 'movie-based' ? (
+        /* Movie-Based View */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredMovies.map((movie) => (
-          <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="p-6">
+          <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group">
+            <div className="p-6" onClick={() => setSelectedMovieForEdit(movie)}>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{movie.title}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-semibold text-gray-900">{movie.title}</h3>
+                    <span className="text-sm text-gray-400 group-hover:text-blue-600 transition-colors">✏️</span>
+                  </div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                       {movie.content_type === 'film' ? '🎬' : movie.content_type === 'serie' ? '📺' : '📚'} {movie.content_type}
@@ -522,11 +667,6 @@ export function MovieList() {
                     )}
                   </div>
                 </div>
-                <DeleteMovieButton 
-                  movieId={movie.id} 
-                  movieTitle={movie.title}
-                  onDeleted={() => handleRemoveMovie(movie.id)}
-                />
               </div>
 
               {movie.description && (
@@ -571,7 +711,7 @@ export function MovieList() {
 
               {/* User's Personal Rating */}
               {user && (
-                <div className="mb-3 p-3 bg-blue-50 rounded-lg">
+                <div className="mb-3 p-3 bg-blue-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
                   <h4 className="text-sm font-medium text-gray-700 mb-2">
                     Deine Bewertung ({user.name}):
                   </h4>
@@ -624,7 +764,74 @@ export function MovieList() {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      ) : (
+        /* Tag-Based View */
+        <div className="space-y-6">
+          {getTagBasedData().map(({ tagName, tag, movies }) => (
+            <div key={tagName} className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-4 border-b border-gray-200" style={{ backgroundColor: tag.color + '20' }}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                  <h3 className="text-lg font-semibold text-gray-900">{tagName}</h3>
+                  <span className="text-sm text-gray-500">({movies.length} Einträge)</span>
+                </div>
+              </div>
+              <div className="p-4 space-y-4">
+                {movies.map((movie) => (
+                  <div key={`${tagName}-${movie.id}`} className="flex items-start gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors" onClick={() => setSelectedMovieForEdit(movie)}>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-gray-900">{movie.title}</h4>
+                        <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                          {movie.content_type === 'film' ? '🎬' : movie.content_type === 'serie' ? '📺' : '📚'} {movie.content_type}
+                        </span>
+                        <span className="text-sm text-gray-400 hover:text-blue-600 transition-colors">✏️</span>
+                      </div>
+                      {movie.description && (
+                        <p className="text-sm text-gray-600 line-clamp-2">{movie.description}</p>
+                      )}
+                      
+                      {/* Show other tags */}
+                      {movie.tags.length > 1 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {movie.tags.filter(t => t.name !== tagName).map((otherTag) => (
+                            <span
+                              key={otherTag.id}
+                              className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
+                              style={{ backgroundColor: otherTag.color }}
+                            >
+                              {otherTag.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Rating info */}
+                    <div className="text-right">
+                      {movie.averageRating > 0 && (
+                        <div className="text-sm text-gray-600">
+                          <div className="flex items-center">
+                            <span className="text-yellow-400 mr-1">★</span>
+                            {movie.averageRating.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {movie.ratingCount} Bewertung{movie.ratingCount !== 1 ? 'en' : ''}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {filteredMovies.length === 0 && (
         <div className="text-center py-12">
@@ -633,6 +840,19 @@ export function MovieList() {
             Versuche eine andere Suche oder füge neue Filme hinzu.
           </p>
         </div>
+      )}
+
+      {/* Movie Detail Modal */}
+      {selectedMovieForEdit && (
+        <MovieDetailModal
+          movie={selectedMovieForEdit}
+          isOpen={!!selectedMovieForEdit}
+          onClose={() => setSelectedMovieForEdit(null)}
+          onMovieUpdated={() => {
+            fetchMoviesWithDetails()
+            setSelectedMovieForEdit(null)
+          }}
+        />
       )}
     </div>
   )
