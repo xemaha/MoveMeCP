@@ -171,7 +171,7 @@ export function MovieList() {
         })
       }
 
-      setAvailableUsers(Array.from(allUsers).filter(Boolean))
+      setAvailableUsers(Array.from(allUsers).filter(u => Boolean(u) && u !== 'System'))
     } catch (error) {
       console.error('Error fetching users:', error)
     }
@@ -648,17 +648,17 @@ export function MovieList() {
       {/* Conditional View Based on Mode */}
       {viewMode === 'movie-based' ? (
         /* Movie-Based View */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {filteredMovies.map((movie) => (
-          <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group">
-            <div className="p-6" onClick={() => setSelectedMovieForEdit(movie)}>
+          <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group sm:p-0 p-0">
+            <div className="p-4 sm:p-6" onClick={() => setSelectedMovieForEdit(movie)}>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-gray-900">{movie.title}</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate max-w-[70vw]">{movie.title}</h3>
                     <span className="text-sm text-gray-400 group-hover:text-blue-600 transition-colors">✏️</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
                     <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                       {movie.content_type === 'film' ? '🎬' : movie.content_type === 'serie' ? '📺' : '📚'} {movie.content_type}
                     </span>
@@ -670,12 +670,12 @@ export function MovieList() {
               </div>
 
               {movie.description && (
-                <p className="text-gray-600 text-sm mb-3 line-clamp-3">{movie.description}</p>
+                <p className="text-gray-600 text-sm mb-2 line-clamp-2 sm:line-clamp-3">{movie.description}</p>
               )}
 
               {/* Tags */}
               {movie.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
+                <div className="flex flex-wrap gap-1 mb-2 sm:mb-3">
                   {movie.tags.map((tag) => (
                     <span
                       key={tag.id}
@@ -689,7 +689,7 @@ export function MovieList() {
               )}
 
               {/* Average Rating */}
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2 text-sm sm:text-base">
                 <div className="flex items-center space-x-2">
                   <div className="flex">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -711,11 +711,11 @@ export function MovieList() {
 
               {/* User's Personal Rating */}
               {user && (
-                <div className="mb-3 p-3 bg-blue-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
+                <div className="mb-2 p-2 sm:p-3 bg-blue-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
                   <h4 className="text-sm font-medium text-gray-700 mb-2">
                     Deine Bewertung ({user.name}):
                   </h4>
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1 text-lg sm:text-xl">
                     {[1, 2, 3, 4, 5].map((star) => {
                       const userRating = getUserRating(movie.ratings, user.id)
                       const isActive = star <= userRating
@@ -742,7 +742,7 @@ export function MovieList() {
 
               {/* Individual User Ratings */}
               {movie.ratings.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="mt-2 pt-2 border-t border-gray-200 text-xs sm:text-sm">
                   <h4 className="text-sm font-medium text-gray-700 mb-2">User-Bewertungen:</h4>
                   <div className="space-y-1">
                     {movie.ratings.map((rating, index) => (

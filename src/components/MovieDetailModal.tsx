@@ -193,11 +193,11 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Film bearbeiten</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-white rounded-t-lg sm:rounded-lg shadow-xl w-full sm:max-w-2xl max-h-[100vh] sm:max-h-[90vh] overflow-y-auto flex flex-col">
+        <div className="p-4 sm:p-6 flex-1 flex flex-col">
+          <div className="flex justify-between items-center mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Tags bearbeiten</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 text-2xl"
@@ -206,48 +206,9 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Titel
-              </label>
-              <input
-                type="text"
-                value={editedMovie.title || ''}
-                onChange={(e) => setEditedMovie({...editedMovie, title: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Beschreibung
-              </label>
-              <textarea
-                value={editedMovie.description || ''}
-                onChange={(e) => setEditedMovie({...editedMovie, description: e.target.value})}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Content Type */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Typ
-              </label>
-              <select
-                value={editedMovie.content_type || ''}
-                onChange={(e) => setEditedMovie({...editedMovie, content_type: e.target.value as 'film' | 'buch' | 'serie'})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="film">🎬 Film</option>
-                <option value="buch">📚 Buch</option>
-                <option value="serie">📺 Serie</option>
-              </select>
-            </div>
+            {/* Nur Tags bearbeiten auf Mobile */}
 
             {/* Tags */}
             <div>
@@ -324,24 +285,24 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
           </div>
 
           {/* Actions */}
-          <div className="flex justify-between items-center pt-6 border-t border-gray-200 mt-6">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center pt-4 sm:pt-6 border-t border-gray-200 mt-4 sm:mt-6 gap-2 sm:gap-0">
             <button
               onClick={handleDeleteMovie}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              className="w-full sm:w-auto mb-2 sm:mb-0 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
             >
               🗑️ Löschen
             </button>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                className="flex-1 sm:flex-none px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
               >
                 Abbrechen
               </button>
               <button
                 onClick={handleSave}
-                disabled={isLoading || !editedMovie.title?.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                disabled={isLoading}
+                className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {isLoading ? 'Speichert...' : 'Speichern'}
               </button>
