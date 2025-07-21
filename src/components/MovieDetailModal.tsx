@@ -23,6 +23,12 @@ interface MovieDetailModalProps {
 }
 
 export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: MovieDetailModalProps) {
+  // Schalter: Sollen alle Tags passen (AND) oder reicht einer (OR)?
+  const [requireAllTags, setRequireAllTags] = useState(false)
+  // Helper: count how many selected tags a movie has
+  function countMatchingTags(movieTags: Tag[], selectedTags: string[]): number {
+    return movieTags.filter(tag => selectedTags.includes(tag.name)).length
+  }
   const [editedMovie, setEditedMovie] = useState<Partial<Movie>>({})
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -206,6 +212,19 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
             </button>
           </div>
 
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              id="require-all-tags"
+              type="checkbox"
+              checked={requireAllTags}
+              onChange={() => setRequireAllTags(v => !v)}
+              className="accent-blue-600 w-5 h-5"
+            />
+            <label className="text-sm font-medium text-gray-700" htmlFor="require-all-tags">
+              Match all tags
+            </label>
+          </div>
+
           <div className="space-y-3 sm:space-y-4">
             {/* Title */}
             {/* Nur Tags bearbeiten auf Mobile */}
@@ -215,7 +234,6 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Tags bearbeiten
               </label>
-              
               {/* Current Tags */}
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-600 mb-2">Aktuelle Tags:</h4>

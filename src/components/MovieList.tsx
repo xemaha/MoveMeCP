@@ -253,15 +253,17 @@ export function MovieList() {
                          movie.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          movie.tags.some(tag => tag.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
-    // User rating filter
-    let matchesUserFilter = true
+    // Rating filter: if user is selected, filter by their rating; otherwise, filter by averageRating
+    let matchesRatingFilter = true
     if (userFilter.userName) {
       const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
       if (!userRating) {
-        matchesUserFilter = false
+        matchesRatingFilter = false
       } else {
-        matchesUserFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+        matchesRatingFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
       }
+    } else {
+      matchesRatingFilter = movie.averageRating >= userFilter.minRating && movie.averageRating <= userFilter.maxRating
     }
 
     // Tag filter
@@ -275,7 +277,7 @@ export function MovieList() {
     // Content type filter
     const matchesContentTypeFilter = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
 
-    return matchesSearch && matchesUserFilter && matchesTagFilter && matchesContentTypeFilter
+    return matchesSearch && matchesRatingFilter && matchesTagFilter && matchesContentTypeFilter
   })
 
   const handleTagClick = (tagName: string) => {
