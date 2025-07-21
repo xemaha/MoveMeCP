@@ -408,8 +408,17 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
               <button
                 onClick={onClose}
                 className="flex-1 sm:flex-none px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                type="button"
               >
                 Abbrechen
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={isLoading}
+                type="button"
+              >
+                {isLoading ? 'Speichern...' : 'Speichern'}
               </button>
             </div>
           </div>
