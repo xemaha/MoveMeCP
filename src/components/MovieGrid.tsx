@@ -1,6 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
+// Helper component to show top 20 tags by default, with 'Alle anzeigen' button
+import React from 'react'
+export function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const topTags = tags.slice(0, 20)
+  return (
+    <div className="flex flex-wrap gap-1 mb-3">
+      {(showAll ? tags : topTags).map((tag: Tag) => (
+        <span
+          key={tag.id}
+          className="px-2 py-1 text-xs rounded-full text-white"
+          style={{ backgroundColor: tag.color }}
+        >
+          #{tag.name}
+        </span>
+      ))}
+      {tags.length > 20 && (
+        <button
+          type="button"
+          className="ml-2 text-xs text-blue-600 hover:underline focus:outline-none"
+          onClick={() => setShowAll(v => !v)}
+        >
+          {showAll ? 'Weniger anzeigen' : 'Alle anzeigen'}
+        </button>
+      )}
+    </div>
+  )
+}
 import { supabase, Movie, Tag } from '@/lib/supabase'
 
 interface MovieWithDetails extends Movie {
@@ -228,20 +257,38 @@ export function MovieGrid() {
                 <p className="text-gray-600 text-sm mb-3 line-clamp-3">{movie.description}</p>
               )}
               
-              {/* Tags */}
+              {/* Tags: show top 20 by default, all on demand */}
               {movie.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {movie.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="px-2 py-1 text-xs rounded-full text-white"
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      #{tag.name}
-                    </span>
-                  ))}
-                </div>
+                <MovieTagsDisplay tags={movie.tags} />
               )}
+// Helper component to show top 20 tags by default, with 'Alle anzeigen' button
+import { useState } from 'react'
+function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const topTags = tags.slice(0, 20)
+  return (
+    <div className="flex flex-wrap gap-1 mb-3">
+      {(showAll ? tags : topTags).map((tag) => (
+        <span
+          key={tag.id}
+          className="px-2 py-1 text-xs rounded-full text-white"
+          style={{ backgroundColor: tag.color }}
+        >
+          #{tag.name}
+        </span>
+      ))}
+      {tags.length > 20 && (
+        <button
+          type="button"
+          className="ml-2 text-xs text-blue-600 hover:underline focus:outline-none"
+          onClick={() => setShowAll(v => !v)}
+        >
+          {showAll ? 'Weniger anzeigen' : 'Alle anzeigen'}
+        </button>
+      )}
+    </div>
+  )
+}
               
               {/* Rating */}
               <div className="space-y-2">

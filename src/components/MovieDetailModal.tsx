@@ -23,8 +23,8 @@ interface MovieDetailModalProps {
 }
 
 export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: MovieDetailModalProps) {
-  // Schalter: Sollen alle Tags passen (AND) oder reicht einer (OR)?
-  const [requireAllTags, setRequireAllTags] = useState(false)
+  // For autocomplete dropdown
+  const [showSuggestions, setShowSuggestions] = useState(false)
   // Helper: count how many selected tags a movie has
   function countMatchingTags(movieTags: Tag[], selectedTags: string[]): number {
     return movieTags.filter(tag => selectedTags.includes(tag.name)).length
@@ -33,9 +33,58 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [newTagName, setNewTagName] = useState('')
-  const [newTagColor, setNewTagColor] = useState('#3B82F6')
+  // Predefined palette of not-too-light colors for tags (good contrast with white text)
+  const tagColorPalette = [
+    '#2563EB', // blue-600
+    '#059669', // emerald-600
+    '#D97706', // amber-600
+    '#DC2626', // red-600
+    '#7C3AED', // violet-600
+    '#EA580C', // orange-600
+    '#0D9488', // teal-600
+    '#B91C1C', // rose-700
+    '#A21CAF', // fuchsia-700
+    '#15803D', // green-700
+    '#1D4ED8', // blue-700
+    '#BE185D', // pink-700
+    '#CA8A04', // yellow-600
+    '#4B5563', // gray-600
+    '#6D28D9', // indigo-700
+  ]
   const [isLoading, setIsLoading] = useState(false)
+  const [showAllTags, setShowAllTags] = useState(false)
   const { user } = useUser()
+
+  // Compute tag usage counts across all movies
+  const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    // Fetch tag usage counts from movie_tags table
+    const fetchTagUsage = async () => {
+      const { data, error } = await supabase
+        .from('movie_tags')
+        .select('tag_id, tags(name)')
+      if (!error && data) {
+        const countMap: Record<string, number> = {}
+        data.forEach((row: any) => {
+          const tagName = row.tags?.name
+          if (tagName) {
+            countMap[tagName] = (countMap[tagName] || 0) + 1
+          }
+        })
+        setTagUsageCount(countMap)
+      }
+    }
+    fetchTagUsage()
+  }, [isOpen])
+
+  // Get top 20 tags by usage (global)
+  const topTags = [...allTags]
+    .sort((a, b) => (tagUsageCount[b.name] || 0) - (tagUsageCount[a.name] || 0))
+    .slice(0, 20)
+
+  // All tags sorted alphabetically
+  const allTagsSorted = [...allTags].sort((a, b) => a.name.localeCompare(b.name))
 
   useEffect(() => {
     if (isOpen && movie) {
@@ -133,14 +182,30 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
   }
 
   const createNewTag = async () => {
-    if (!newTagName.trim()) return
+    const trimmed = newTagName.trim()
+    if (!trimmed) return
+
+    // Check if tag already exists (case-insensitive)
+    const existingTag = allTags.find(t => t.name.toLowerCase() === trimmed.toLowerCase())
+    if (existingTag) {
+      // Just add to selectedTags if not already selected
+      if (!selectedTags.includes(existingTag.name)) {
+        setSelectedTags([...selectedTags, existingTag.name])
+      }
+      setNewTagName('')
+      setShowSuggestions(false)
+      return
+    }
+
+    // Pick a random color from the palette
+    const randomColor = tagColorPalette[Math.floor(Math.random() * tagColorPalette.length)]
 
     try {
       const { data, error } = await supabase
         .from('tags')
         .insert([{
-          name: newTagName.trim(),
-          color: newTagColor
+          name: trimmed,
+          color: randomColor
         }])
         .select()
 
@@ -155,7 +220,7 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
         setAllTags([...allTags, newTag])
         setSelectedTags([...selectedTags, newTag.name])
         setNewTagName('')
-        setNewTagColor('#3B82F6')
+        setShowSuggestions(false)
       }
     } catch (error) {
       console.error('Error creating tag:', error)
@@ -212,19 +277,6 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
             </button>
           </div>
 
-          <div className="mb-4 flex items-center gap-2">
-            <input
-              id="require-all-tags"
-              type="checkbox"
-              checked={requireAllTags}
-              onChange={() => setRequireAllTags(v => !v)}
-              className="accent-blue-600 w-5 h-5"
-            />
-            <label className="text-sm font-medium text-gray-700" htmlFor="require-all-tags">
-              Match all tags
-            </label>
-          </div>
-
           <div className="space-y-3 sm:space-y-4">
             {/* Title */}
             {/* Nur Tags bearbeiten auf Mobile */}
@@ -234,11 +286,11 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Tags bearbeiten
               </label>
-              {/* Current Tags */}
+              {/* Current Tags (show top 20 by default, all on demand) */}
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-600 mb-2">Aktuelle Tags:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {selectedTags.map(tagName => {
+                  {(showAllTags ? selectedTags : selectedTags.slice(0, 20)).map(tagName => {
                     const tag = allTags.find(t => t.name === tagName)
                     return (
                       <button
@@ -256,40 +308,57 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                     <p className="text-sm text-gray-500 italic">Keine Tags ausgewählt</p>
                   )}
                 </div>
+                {selectedTags.length > 20 && (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs text-blue-600 hover:underline focus:outline-none"
+                    onClick={() => setShowAllTags(v => !v)}
+                  >
+                    {showAllTags ? 'Weniger anzeigen' : 'Alle anzeigen'}
+                  </button>
+                )}
               </div>
 
               {/* Available Tags to Add */}
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-600 mb-2">Tags hinzufügen:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {allTags.filter(tag => !selectedTags.includes(tag.name)).map(tag => (
-                    <button
-                      key={tag.id}
-                      onClick={() => toggleTag(tag.name)}
-                      className="px-3 py-1 rounded-full text-sm font-medium text-white opacity-60 hover:opacity-100 transition-opacity"
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      {tag.name}
-                      <span className="ml-1 text-xs">+</span>
-                    </button>
-                  ))}
+                  {(showAllTags ? allTagsSorted : topTags)
+                    .filter(tag => !selectedTags.includes(tag.name))
+                    .map(tag => (
+                      <button
+                        key={tag.id}
+                        onClick={() => toggleTag(tag.name)}
+                        className="px-3 py-1 rounded-full text-sm font-medium text-white opacity-60 hover:opacity-100 transition-opacity"
+                        style={{ backgroundColor: tag.color }}
+                      >
+                        {tag.name}
+                        <span className="ml-1 text-xs">+</span>
+                      </button>
+                    ))}
                 </div>
+                {allTags.length > 10 && (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs text-blue-600 hover:underline focus:outline-none"
+                    onClick={() => setShowAllTags(v => !v)}
+                  >
+                    {showAllTags ? 'Weniger anzeigen' : 'Alle anzeigen'}
+                  </button>
+                )}
               </div>
 
               {/* New Tag Creation */}
-              <div className="flex gap-2">
+              <div className="relative flex gap-2">
                 <input
                   type="text"
                   placeholder="Neuer Tag..."
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <input
-                  type="color"
-                  value={newTagColor}
-                  onChange={(e) => setNewTagColor(e.target.value)}
-                  className="w-12 h-10 border border-gray-300 rounded-md cursor-pointer"
+                  autoComplete="off"
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 100)}
                 />
                 <button
                   onClick={createNewTag}
@@ -298,6 +367,31 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                 >
                   + Tag
                 </button>
+                {/* Autocomplete Suggestions */}
+                {showSuggestions && newTagName.trim() && (
+                  <div className="absolute left-0 top-full mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
+                    {allTags
+                      .filter(tag =>
+                        tag.name.toLowerCase().includes(newTagName.trim().toLowerCase()) &&
+                        !selectedTags.includes(tag.name)
+                      )
+                      .slice(0, 10)
+                      .map(tag => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className="block w-full text-left px-3 py-2 hover:bg-blue-100 text-sm"
+                          onMouseDown={() => {
+                            setSelectedTags(prev => [...prev, tag.name])
+                            setNewTagName('')
+                            setShowSuggestions(false)
+                          }}
+                        >
+                          {tag.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -316,13 +410,6 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                 className="flex-1 sm:flex-none px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
               >
                 Abbrechen
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isLoading}
-                className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {isLoading ? 'Speichert...' : 'Speichern'}
               </button>
             </div>
           </div>

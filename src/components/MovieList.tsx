@@ -1,5 +1,8 @@
 'use client'
-
+// Type helpers for react-range props (no @types/react-range available)
+type RangeTrackProps = { props: any; children: React.ReactNode }
+type RangeThumbProps = { props: any; index: number }
+import { Range } from 'react-range'
 import { useState, useEffect } from 'react'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
@@ -20,8 +23,8 @@ interface MovieWithDetails extends Movie {
 
 interface UserRatingFilter {
   userName: string
-  minRating: number
-  maxRating: number
+  minRating: number | null
+  maxRating: number | null
 }
 
 interface ContentTypeFilter {
@@ -31,6 +34,43 @@ interface ContentTypeFilter {
 }
 
 export function MovieList() {
+  async function handleDeleteRating(movieId: string) {
+    if (!user) return;
+    try {
+      // Find the rating id
+      const { data, error } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('movie_id', movieId)
+        .eq('user_id', user.id)
+        .single();
+      if (error || !data) return;
+      await supabase
+        .from('ratings')
+        .delete()
+        .eq('id', data.id);
+      // Update local state
+      setMovies(prevMovies => prevMovies.map(movie => {
+        if (movie.id === movieId) {
+          const updatedRatings = movie.ratings.filter(r => r.user_id !== user.id);
+          const averageRating = updatedRatings.length > 0
+            ? updatedRatings.reduce((sum, r) => sum + r.rating, 0) / updatedRatings.length
+            : 0;
+          return {
+            ...movie,
+            ratings: updatedRatings,
+            averageRating,
+            ratingCount: updatedRatings.length
+          };
+        }
+        return movie;
+      }));
+    } catch (err) {
+      console.error('Fehler beim Löschen der Bewertung', err);
+    }
+  }
+  // Tag-Filter: AND/OR Umschalter
+  const [requireAllTags, setRequireAllTags] = useState(true)
   const [movies, setMovies] = useState<MovieWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +80,7 @@ export function MovieList() {
     minRating: 1,
     maxRating: 5
   })
+  const [showUnrated, setShowUnrated] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<string[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -77,7 +118,7 @@ export function MovieList() {
         if (!userRating) {
           matchesUserFilter = false
         } else {
-          matchesUserFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+          matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
         }
       }
 
@@ -102,7 +143,7 @@ export function MovieList() {
         if (!userRating) {
           matchesUserFilter = false
         } else {
-          matchesUserFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+          matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
         }
       }
       return matchesSearch && matchesContentType && matchesUserFilter
@@ -257,21 +298,35 @@ export function MovieList() {
     let matchesRatingFilter = true
     if (userFilter.userName) {
       const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-      if (!userRating) {
-        matchesRatingFilter = false
+      if (userFilter.minRating === 0) {
+        // Show movies with no rating by this user, or in range
+        matchesRatingFilter = !userRating || (userRating.rating >= 1 && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5))
       } else {
-        matchesRatingFilter = userRating.rating >= userFilter.minRating && userRating.rating <= userFilter.maxRating
+        matchesRatingFilter = !!userRating && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
       }
     } else {
-      matchesRatingFilter = movie.averageRating >= userFilter.minRating && movie.averageRating <= userFilter.maxRating
+      if (userFilter.minRating === 0) {
+        // Show unrated movies (no ratings) or movies in range
+        matchesRatingFilter = movie.ratings.length === 0 || (movie.averageRating >= 1 && movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5))
+      } else {
+        matchesRatingFilter = movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5)
+      }
     }
 
     // Tag filter
     let matchesTagFilter = true
     if (selectedTags.length > 0) {
-      matchesTagFilter = selectedTags.some(selectedTag => 
-        movie.tags.some(movieTag => movieTag.name === selectedTag)
-      )
+      if (requireAllTags) {
+        // AND: Movie must have all selected tags
+        matchesTagFilter = selectedTags.every(selectedTag =>
+          movie.tags.some(movieTag => movieTag.name === selectedTag)
+        )
+      } else {
+        // OR: Movie must have at least one selected tag
+        matchesTagFilter = selectedTags.some(selectedTag =>
+          movie.tags.some(movieTag => movieTag.name === selectedTag)
+        )
+      }
     }
 
     // Content type filter
@@ -500,12 +555,6 @@ export function MovieList() {
         <div className="bg-green-50 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-700">Content-Type Filter</h3>
-            <button
-              onClick={resetContentTypeFilter}
-              className="text-xs text-green-600 hover:text-green-800 underline"
-            >
-              Alle anzeigen
-            </button>
           </div>
           <div className="flex flex-wrap gap-3">
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -542,18 +591,12 @@ export function MovieList() {
               </span>
             </label>
           </div>
-          <div className="mt-2 text-xs text-gray-500">
-            Aktiviert: {Object.entries(contentTypeFilter).filter(([_, active]) => active).map(([type, _]) => {
-              const icons = { film: '🎬', buch: '📚', serie: '📺' }
-              return `${icons[type as keyof typeof icons]} ${type}`
-            }).join(', ')}
-          </div>
         </div>
 
         {/* User Rating Filter */}
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Filter nach User-Bewertungen</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">User</label>
               <select
@@ -567,29 +610,44 @@ export function MovieList() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Min. Bewertung</label>
-              <select
-                value={userFilter.minRating}
-                onChange={(e) => setUserFilter({...userFilter, minRating: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {[1, 2, 3, 4, 5].map(rating => (
-                  <option key={rating} value={rating}>{rating} ⭐</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Max. Bewertung</label>
-              <select
-                value={userFilter.maxRating}
-                onChange={(e) => setUserFilter({...userFilter, maxRating: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {[1, 2, 3, 4, 5].map(rating => (
-                  <option key={rating} value={rating}>{rating} ⭐</option>
-                ))}
-              </select>
+          </div>
+          {/* Rating slider directly under user dropdown, no label or extra text */}
+          <div className="flex flex-col gap-2 w-full mt-4">
+            <Range
+              step={1}
+              min={0}
+              max={5}
+              values={[userFilter.minRating ?? 0, userFilter.maxRating ?? 5]}
+              onChange={(values: number[]) => setUserFilter({ ...userFilter, minRating: values[0], maxRating: values[1] })}
+              renderTrack={({ props, children }: RangeTrackProps) => (
+                <div {...props} className="h-2 w-full rounded bg-gray-200 my-4" style={{ ...props.style }}>
+                  <div className="h-2 rounded bg-yellow-400" style={{
+                    position: 'absolute',
+                    left: `${((userFilter.minRating ?? 0) / 5) * 100}%`,
+                    width: `${(((userFilter.maxRating ?? 5) - (userFilter.minRating ?? 0)) / 5) * 100}%`,
+                    top: 0,
+                    bottom: 0
+                  }} />
+                  {children}
+                </div>
+              )}
+              renderThumb={({ props, index }: RangeThumbProps) => (
+                <div
+                  {...props}
+                  className="w-5 h-5 bg-yellow-400 border-2 border-yellow-600 rounded-full flex items-center justify-center shadow"
+                  style={{ ...props.style }}
+                >
+                  <span className="text-xs font-bold text-white select-none">{[userFilter.minRating ?? 0, userFilter.maxRating ?? 5][index]}</span>
+                </div>
+              )}
+            />
+            <div className="flex justify-between text-xs text-gray-500 w-full px-1">
+              <span>0</span>
+              <span>1</span>
+              <span>2</span>
+              <span>3</span>
+              <span>4</span>
+              <span>5</span>
             </div>
           </div>
         </div>
@@ -597,7 +655,21 @@ export function MovieList() {
         {/* Tag Filter */}
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-700">Filter nach Tags</h3>
+            <div className="flex items-center gap-4">
+              <h3 className="text-sm font-medium text-gray-700">Filter nach Tags</h3>
+              <label className="flex items-center gap-2 cursor-pointer bg-white rounded px-2 py-1 shadow text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setRequireAllTags(v => !v)}
+                  className={`relative w-10 h-6 flex items-center rounded-full transition-colors duration-200 focus:outline-none ${requireAllTags ? 'bg-blue-600' : 'bg-gray-300'}`}
+                  aria-pressed={requireAllTags}
+                  aria-label="Match all tags"
+                >
+                  <span className={`absolute left-1 top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${requireAllTags ? 'translate-x-4' : ''}`}></span>
+                </button>
+                <span className="ml-2 select-none">Match all tags</span>
+              </label>
+            </div>
             {selectedTags.length > 0 && (
               <button
                 onClick={clearTagFilter}
@@ -738,7 +810,18 @@ export function MovieList() {
                         ? `${getUserRating(movie.ratings, user.id)} Sterne` 
                         : 'Noch nicht bewertet'}
                     </span>
+                    {/* Button to delete rating */}
+                    {getUserRating(movie.ratings, user.id) > 0 && (
+                      <button
+                        onClick={() => handleDeleteRating(movie.id)}
+                        className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                        title="Bewertung löschen"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
+
                 </div>
               )}
 
