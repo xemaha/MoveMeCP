@@ -265,7 +265,7 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
-      <div className="bg-white rounded-t-lg sm:rounded-lg shadow-xl w-full sm:max-w-2xl max-h-[100vh] sm:max-h-[90vh] overflow-y-auto flex flex-col">
+      <div className="bg-white rounded-t-lg sm:rounded-lg shadow-xl w-full sm:max-w-2xl h-full overflow-y-auto flex flex-col">
         <div className="p-4 sm:p-6 flex-1 flex flex-col">
           <div className="flex justify-between items-center mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900">Tags bearbeiten</h2>
