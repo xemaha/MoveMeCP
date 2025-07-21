@@ -355,7 +355,7 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                   type="text"
                   placeholder="Neuer Tag..."
                   value={newTagName}
-                  onChange={(e) => setNewTagName(e.target.value)}
+                  onChange={(e) => setNewTagName(e.target.value.toLowerCase())}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoComplete="off"
                   onFocus={() => setShowSuggestions(true)}
