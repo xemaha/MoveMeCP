@@ -182,11 +182,12 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
   }
 
   const createNewTag = async () => {
-    const trimmed = newTagName.trim()
+
+    const trimmed = newTagName.trim().toLowerCase()
     if (!trimmed) return
 
     // Check if tag already exists (case-insensitive)
-    const existingTag = allTags.find(t => t.name.toLowerCase() === trimmed.toLowerCase())
+    const existingTag = allTags.find(t => t.name.toLowerCase() === trimmed)
     if (existingTag) {
       // Just add to selectedTags if not already selected
       if (!selectedTags.includes(existingTag.name)) {
