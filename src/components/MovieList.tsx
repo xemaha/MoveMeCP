@@ -3,10 +3,44 @@
 type RangeTrackProps = { props: any; children: React.ReactNode }
 type RangeThumbProps = { props: any; index: number }
 import { Range } from 'react-range'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { useUser } from '@/lib/UserContext'
+
+// TagListDisplay: Zeigt Top 20 Tags, mit Button zum Umschalten auf alle alphabetisch sortiert
+interface TagListDisplayProps {
+  tags: Tag[]
+}
+
+const TagListDisplay: React.FC<TagListDisplayProps> = ({ tags }) => {
+  const [showAll, setShowAll] = useState(false)
+  if (!tags || tags.length === 0) return null
+  const tagsSorted = [...tags].sort((a, b) => a.name.localeCompare(b.name))
+  const tagsToShow = showAll ? tagsSorted : tags.slice(0, 20)
+  return (
+    <div className="flex flex-wrap gap-1 mb-2 sm:mb-3">
+      {tagsToShow.map((tag) => (
+        <span
+          key={tag.id}
+          className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
+          style={{ backgroundColor: tag.color }}
+        >
+          {tag.name}
+        </span>
+      ))}
+      {tags.length > 20 && (
+        <button
+          type="button"
+          className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
+          onClick={() => setShowAll(v => !v)}
+        >
+          {showAll ? 'Weniger anzeigen' : 'Alle anzeigen'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 interface Rating {
   rating: number
@@ -93,10 +127,34 @@ export function MovieList() {
   const [selectedMovieForEdit, setSelectedMovieForEdit] = useState<MovieWithDetails | null>(null)
   const { user } = useUser()
 
+  // State for tag display toggle
+  const [showAllTags, setShowAllTags] = useState(false)
+  const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
+
   useEffect(() => {
     fetchMoviesWithDetails()
     fetchAvailableUsers()
     fetchAllTags()
+  }, [])
+
+  // Fetch tag usage counts from movie_tags table (like in MovieDetailModal)
+  useEffect(() => {
+    const fetchTagUsage = async () => {
+      const { data, error } = await supabase
+        .from('movie_tags')
+        .select('tag_id, tags(name)')
+      if (!error && data) {
+        const countMap: Record<string, number> = {}
+        data.forEach((row: any) => {
+          const tagName = row.tags?.name
+          if (tagName) {
+            countMap[tagName] = (countMap[tagName] || 0) + 1
+          }
+        })
+        setTagUsageCount(countMap)
+      }
+    }
+    fetchTagUsage()
   }, [])
 
   // Get available tags based on current filters (content type, user ratings, search)
@@ -335,6 +393,17 @@ export function MovieList() {
     return matchesSearch && matchesRatingFilter && matchesTagFilter && matchesContentTypeFilter
   })
 
+  // Helper: count how many selected tags a movie has
+  function countMatchingTags(movieTags: Tag[], selectedTags: string[]): number {
+    return movieTags.filter(tag => selectedTags.includes(tag.name)).length
+  }
+
+  // Helper: Anzahl Filme für einen Tag nach aktuellem Filter
+  function getMovieCountForTag(tagName: string) {
+    // Zeige, wie viele Filme nach aktuellem Filter diesen Tag noch haben
+    return filteredMovies.filter(movie => movie.tags.some(tag => tag.name === tagName)).length
+  }
+
   const handleTagClick = (tagName: string) => {
     setSelectedTags(prev => {
       if (prev.includes(tagName)) {
@@ -502,6 +571,13 @@ export function MovieList() {
       </div>
     )
   }
+
+  // Top 20 tags by usage
+  const topTags = [...allTags]
+    .sort((a, b) => (tagUsageCount[b.name] || 0) - (tagUsageCount[a.name] || 0))
+    .slice(0, 20)
+  // All tags sorted alphabetically
+  const allTagsSorted = [...allTags].sort((a, b) => a.name.localeCompare(b.name))
 
   return (
     <div className="space-y-6">
@@ -680,36 +756,30 @@ export function MovieList() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {availableTagsForCurrentFilters.map((tag) => (
+            {(showAllTags ? allTagsSorted : topTags).map(tag => (
               <button
                 key={tag.id}
-                onClick={() => handleTagClick(tag.name)}
-                className={`inline-block px-3 py-1 rounded-full text-sm font-medium transition-all ${
-                  selectedTags.includes(tag.name)
-                    ? 'text-white shadow-lg ring-2 ring-white'
-                    : 'text-white hover:shadow-md opacity-80 hover:opacity-100'
-                }`}
+                onClick={() => {
+                  setSelectedTags(selectedTags.includes(tag.name)
+                    ? selectedTags.filter(t => t !== tag.name)
+                    : [...selectedTags, tag.name])
+                }}
+                className={`px-3 py-1 rounded-full text-sm font-medium text-white transition-opacity ${selectedTags.includes(tag.name) ? 'opacity-100 bg-blue-600' : 'opacity-60 bg-gray-500 hover:opacity-100'}`}
                 style={{ backgroundColor: tag.color }}
               >
                 {tag.name}
-                <span className="ml-1 text-xs opacity-75">({tag.count})</span>
-                {selectedTags.includes(tag.name) && (
-                  <span className="ml-1 text-xs">✓</span>
-                )}
+                <span className="ml-1 text-xs">({getMovieCountForTag(tag.name)})</span>
               </button>
             ))}
           </div>
-          {availableTagsForCurrentFilters.length === 0 && (
-            <p className="text-sm text-gray-500 italic">
-              Keine Tags für die ausgewählten Filter verfügbar
-            </p>
-          )}
-          {selectedTags.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-blue-200">
-              <p className="text-sm text-gray-600">
-                Aktive Filter: {selectedTags.join(', ')}
-              </p>
-            </div>
+          {(allTags.length > 20) && (
+            <button
+              type="button"
+              className="mt-2 text-xs text-blue-600 hover:underline focus:outline-none"
+              onClick={() => setShowAllTags(v => !v)}
+            >
+              {showAllTags ? 'Weniger anzeigen' : 'Alle anzeigen'}
+            </button>
           )}
         </div>
       </div>
@@ -723,7 +793,17 @@ export function MovieList() {
       {viewMode === 'movie-based' ? (
         /* Movie-Based View */
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-        {filteredMovies.map((movie) => (
+        {filteredMovies
+          .slice()
+          .sort((a, b) => {
+            // 1. Sort by number of matching selected tags (desc)
+            const matchA = countMatchingTags(a.tags, selectedTags)
+            const matchB = countMatchingTags(b.tags, selectedTags)
+            if (matchB !== matchA) return matchB - matchA
+            // 2. Then by best average rating (desc)
+            return (b.averageRating || 0) - (a.averageRating || 0)
+          })
+          .map((movie) => (
           <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group sm:p-0 p-0">
             <div className="p-4 sm:p-6" onClick={() => setSelectedMovieForEdit(movie)}>
               <div className="flex justify-between items-start mb-2">
@@ -748,19 +828,11 @@ export function MovieList() {
               )}
 
               {/* Tags */}
+
               {movie.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2 sm:mb-3">
-                  {movie.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
+                <TagListDisplay tags={movie.tags} />
               )}
+
 
               {/* Average Rating */}
               <div className="flex items-center justify-between mb-2 text-sm sm:text-base">
@@ -880,19 +952,9 @@ export function MovieList() {
                         <p className="text-sm text-gray-600 line-clamp-2">{movie.description}</p>
                       )}
                       
-                      {/* Show other tags */}
-                      {movie.tags.length > 1 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {movie.tags.filter(t => t.name !== tagName).map((otherTag) => (
-                            <span
-                              key={otherTag.id}
-                              className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-                              style={{ backgroundColor: otherTag.color }}
-                            >
-                              {otherTag.name}
-                            </span>
-                          ))}
-                        </div>
+                      {/* Show tags */}
+                      {movie.tags.length > 0 && (
+                        <TagListDisplay tags={movie.tags} />
                       )}
                     </div>
                     
