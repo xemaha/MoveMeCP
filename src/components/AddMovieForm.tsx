@@ -96,18 +96,21 @@ export default function AddMovieForm() {
 
   // Click outside handler for OMDb dropdown
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (omdbDropdownRef.current && !omdbDropdownRef.current.contains(event.target as Node)) {
         setShowOmdbSuggestions(false);
       }
     }
     if (showOmdbSuggestions) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
     } else {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [showOmdbSuggestions]);
 
@@ -366,7 +369,7 @@ export default function AddMovieForm() {
             {omdbSuggestions.map((omdb) => (
               <div
                 key={omdb.imdbID}
-                onMouseDown={() => handleOmdbSuggestionClick(omdb)}
+                onPointerDown={() => handleOmdbSuggestionClick(omdb)}
                 className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
               >
                 {omdb.Poster && omdb.Poster !== 'N/A' && (
