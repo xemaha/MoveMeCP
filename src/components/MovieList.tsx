@@ -122,8 +122,8 @@ export function MovieList() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [contentTypeFilter, setContentTypeFilter] = useState<ContentTypeFilter>({
     film: true,
-    buch: true,
-    serie: true
+    serie: true,
+    buch: false
   })
   const [viewMode, setViewMode] = useState<'movie-based' | 'tag-based'>('movie-based')
   const [selectedMovieForEdit, setSelectedMovieForEdit] = useState<MovieWithDetails | null>(null)
@@ -281,14 +281,16 @@ export function MovieList() {
   const fetchMoviesWithDetails = async () => {
     try {
       setIsLoading(true)
-      
       // Fetch movies
       const { data: moviesData, error: moviesError } = await supabase
         .from('movies')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (moviesError) throw moviesError
+      if (moviesError) {
+        setError('Supabase: ' + (moviesError.message || moviesError.details || JSON.stringify(moviesError)))
+        throw moviesError
+      }
 
       if (!moviesData) {
         setMovies([])
@@ -339,9 +341,9 @@ export function MovieList() {
       )
 
       setMovies(moviesWithDetails)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching movies:', error)
-      setError('Fehler beim Laden der Filme')
+      setError('Fehler beim Laden der Filme: ' + (error.message || error.details || JSON.stringify(error)))
     } finally {
       setIsLoading(false)
     }
@@ -648,23 +650,23 @@ export function MovieList() {
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={contentTypeFilter.buch}
-                onChange={() => handleContentTypeToggle('buch')}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                📚 Bücher
-              </span>
-            </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
                 checked={contentTypeFilter.serie}
                 onChange={() => handleContentTypeToggle('serie')}
                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
               />
               <span className="text-sm font-medium text-gray-700">
                 📺 Serien
+              </span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={contentTypeFilter.buch}
+                onChange={() => handleContentTypeToggle('buch')}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                📚 Bücher
               </span>
             </label>
           </div>
