@@ -162,60 +162,67 @@ export function MovieList() {
   // Get available tags based on current filters (content type, user ratings, search)
   const availableTagsForCurrentFilters = allTags.filter(tag => {
     // Get movies that match current filters (excluding tag filter)
-    const filteredMovies = movies.filter(movie => {
-      // Text search filter
-      const matchesSearch = searchQuery === '' || 
-        movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        movie.description?.toLowerCase().includes(searchQuery.toLowerCase())
-
-      // Content type filter
-      const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-
-      // User rating filter
-      let matchesUserFilter = true
-      if (userFilter.userName) {
-        const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-        if (!userRating) {
-          matchesUserFilter = false
-        } else {
-          matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+      const filteredMovies = movies.filter(movie => {
+        // Text search filter - nur title, actor, director und tags durchsuchen
+        const lowerQuery = searchQuery.toLowerCase();
+        const matchesSearch = searchQuery === '' || 
+          movie.title.toLowerCase().includes(lowerQuery) ||
+          (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
+          (movie.director && movie.director.toLowerCase().includes(lowerQuery)) ||
+          movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery));
+  
+        // Content type filter
+        const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+  
+        // User rating filter
+        let matchesUserFilter = true
+        if (userFilter.userName) {
+          const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+          if (!userRating) {
+            matchesUserFilter = false
+          } else {
+            matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+          }
         }
-      }
-
-      return matchesSearch && matchesContentType && matchesUserFilter
-    })
-
-    // Check if this tag is used by any of the filtered movies
-    return filteredMovies.some(movie => {
-      return movie.tags.some(movieTag => movieTag.name === tag.name)
-    })
-  }).map(tag => {
-    // Add count of how many movies have this tag
-    const filteredMovies = movies.filter(movie => {
-      // Apply all filters except tag filter
-      const matchesSearch = searchQuery === '' || 
-        movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        movie.description?.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-      let matchesUserFilter = true
-      if (userFilter.userName) {
-        const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-        if (!userRating) {
-          matchesUserFilter = false
-        } else {
-          matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+  
+        return matchesSearch && matchesContentType && matchesUserFilter
+      })
+  
+      // Check if this tag is used by any of the filtered movies
+      return filteredMovies.some(movie => {
+        return movie.tags.some(movieTag => movieTag.name === tag.name)
+      })
+    }).map(tag => {
+      // Add count of how many movies have this tag
+      const filteredMovies = movies.filter(movie => {
+        // Apply all filters except tag filter
+        // Text search filter - nur title, actor, director und tags durchsuchen
+        const lowerQuery = searchQuery.toLowerCase();
+        const matchesSearch = searchQuery === '' || 
+          movie.title.toLowerCase().includes(lowerQuery) ||
+          (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
+          (movie.director && movie.director.toLowerCase().includes(lowerQuery)) ||
+          movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery));
+          
+        const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+        let matchesUserFilter = true
+        if (userFilter.userName) {
+          const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+          if (!userRating) {
+            matchesUserFilter = false
+          } else {
+            matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+          }
         }
-      }
-      return matchesSearch && matchesContentType && matchesUserFilter
+        return matchesSearch && matchesContentType && matchesUserFilter
+      })
+  
+      const count = filteredMovies.filter(movie => 
+        movie.tags.some(movieTag => movieTag.name === tag.name)
+      ).length
+  
+      return { ...tag, count }
     })
-
-    const count = filteredMovies.filter(movie => 
-      movie.tags.some(movieTag => movieTag.name === tag.name)
-    ).length
-
-    return { ...tag, count }
-  })
-
   // Clear selected tags that are no longer available when filters change
   useEffect(() => {
     if (selectedTags.length > 0) {
@@ -355,7 +362,6 @@ export function MovieList() {
     const lowerQuery = searchQuery.toLowerCase();
     const matchesSearch =
       movie.title.toLowerCase().includes(lowerQuery) ||
-      movie.description?.toLowerCase().includes(lowerQuery) ||
       movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery)) ||
       (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
       (movie.director && movie.director.toLowerCase().includes(lowerQuery));

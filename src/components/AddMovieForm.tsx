@@ -70,6 +70,7 @@ export default function AddMovieForm() {
         return;
       }
       // Supabase interne Suche (immer)
+            // Supabase interne Suche (immer)
       try {
         const { data: movies, error } = await supabase
           .from('movies')

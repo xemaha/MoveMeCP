@@ -9,14 +9,19 @@ interface MovieSearchProps {
 
 export function MovieSearch({ onSearch, onTagFilter }: MovieSearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'title' | 'tags'>('all')
+  const [selectedFilter, setSelectedFilter] = useState<'title' | 'actor' | 'director' | 'tags'>('title')
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    onSearch(searchQuery)
+    if (selectedFilter === 'tags') {
+      onTagFilter(searchQuery)
+    } else {
+      onSearch(`${selectedFilter}:${searchQuery}`)
+    }
   }
 
   const handleTagClick = (tag: string) => {
+    setSelectedFilter('tags')
     onTagFilter(tag)
     setSearchQuery(tag)
   }
@@ -51,36 +56,21 @@ export function MovieSearch({ onSearch, onTagFilter }: MovieSearchProps) {
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-sm text-gray-600">Filtern nach:</span>
         <div className="flex gap-2">
-          <button
-            onClick={() => setSelectedFilter('all')}
-            className={`px-3 py-1 rounded-full text-sm ${
-              selectedFilter === 'all' 
-                ? 'bg-blue-100 text-blue-800' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Alle
-          </button>
-          <button
-            onClick={() => setSelectedFilter('title')}
-            className={`px-3 py-1 rounded-full text-sm ${
-              selectedFilter === 'title' 
-                ? 'bg-blue-100 text-blue-800' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Titel
-          </button>
-          <button
-            onClick={() => setSelectedFilter('tags')}
-            className={`px-3 py-1 rounded-full text-sm ${
-              selectedFilter === 'tags' 
-                ? 'bg-blue-100 text-blue-800' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Tags
-          </button>
+          {(['title', 'actor', 'director', 'tags'] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setSelectedFilter(filter)}
+              className={`px-3 py-1 rounded-full text-sm ${
+                selectedFilter === filter
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {filter === 'title' ? 'Titel' :
+               filter === 'actor' ? 'Schauspieler' :
+               filter === 'director' ? 'Regisseur' : 'Tags'}
+            </button>
+          ))}
         </div>
       </div>
 
