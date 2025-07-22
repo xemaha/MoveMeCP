@@ -35,6 +35,7 @@ export interface Movie {
   year?: number
   poster_url?: string
   created_by?: string
+  trailer_url?: string
   created_at: string
 }
 

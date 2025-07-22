@@ -1,9 +1,11 @@
 'use client'
 
+
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
-
+import { searchTMDb, getTMDbDetails } from '@/lib/tmdbApi'
+import type { MovieDetails } from '@/lib/types'
 
 interface MovieSuggestion {
   id: string
@@ -12,18 +14,31 @@ interface MovieSuggestion {
   creator_name?: string
 }
 
-interface OmdbSuggestion {
-  imdbID: string
-  Title: string
-  Year: string
-  Type: string
-  Poster: string
+interface TmdbSuggestion {
+  id: number
+  title?: string
+  name?: string
+  release_date?: string
+  first_air_date?: string
+  poster_path?: string
+  media_type: 'movie' | 'tv';
 }
 
 export default function AddMovieForm() {
+  // Tag Autocomplete
+  const [allTags, setAllTags] = useState<{ name: string; color: string }[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  useEffect(() => {
+    // Fetch all tags from Supabase once on mount
+    const fetchTags = async () => {
+      const { data, error } = await supabase.from('tags').select('name, color').order('name');
+      if (!error && data) setAllTags((data as { name: string; color: string }[]).filter(t => typeof t.name === 'string' && typeof t.color === 'string'));
+    };
+    fetchTags();
+  }, []);
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [contentType, setContentType] = useState('film')
+  const [contentType, setContentType] = useState('film') // Wird jetzt automatisch gesetzt
   const [rating, setRating] = useState<number>(0)
   const [tags, setTags] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -31,27 +46,26 @@ export default function AddMovieForm() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState<MovieSuggestion | null>(null)
   const { user } = useUser()
-  // OMDb Autocomplete
-  const [omdbSuggestions, setOmdbSuggestions] = useState<OmdbSuggestion[]>([])
-  const [showOmdbSuggestions, setShowOmdbSuggestions] = useState(false)
+  // TMDb Autocomplete
+  const [tmdbSuggestions, setTmdbSuggestions] = useState<TmdbSuggestion[]>([])
+  const [showTmdbSuggestions, setShowTmdbSuggestions] = useState(false)
   const [director, setDirector] = useState('')
   const [actor, setActor] = useState('')
   const [year, setYear] = useState('')
   const [genre, setGenre] = useState('')
   const [posterUrl, setPosterUrl] = useState('')
 
-  // Autocomplete für Filme (Supabase + OMDb)
-  // Click outside ref for OMDb dropdown
-  const omdbDropdownRef = useRef<HTMLDivElement>(null);
-  // Fetch OMDb suggestions and Supabase suggestions on title change
+  // Autocomplete für Filme (Supabase + TMDb)
+  // Click outside ref for TMDb dropdown
+  const tmdbDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let ignore = false;
     const fetchSuggestions = async () => {
       if (title.trim().length < 2) {
         setSuggestions([]);
         setShowSuggestions(false);
-        setOmdbSuggestions([]);
-        setShowOmdbSuggestions(false);
+        setTmdbSuggestions([]);
+        setShowTmdbSuggestions(false);
         return;
       }
       // Supabase interne Suche
@@ -78,23 +92,23 @@ export default function AddMovieForm() {
       } catch (error) {
         // Fehlerbehandlung
       }
-      // OMDb Autocomplete via API route
+      // TMDb Autocomplete via API route
       try {
-        const res = await fetch(`/api/omdb?title=${encodeURIComponent(title.trim())}`);
+        const res = await fetch(`/api/tmdb?title=${encodeURIComponent(title.trim())}`);
         const data = await res.json();
         if (!ignore) {
-          if (data && data.Search && data.Search.length > 0) {
-            setOmdbSuggestions(data.Search);
-            setShowOmdbSuggestions(true);
+          if (data && data.results && data.results.length > 0) {
+            setTmdbSuggestions(data.results);
+            setShowTmdbSuggestions(true);
           } else {
-            setOmdbSuggestions([]);
-            setShowOmdbSuggestions(false);
+            setTmdbSuggestions([]);
+            setShowTmdbSuggestions(false);
           }
         }
       } catch (error) {
         if (!ignore) {
-          setOmdbSuggestions([]);
-          setShowOmdbSuggestions(false);
+          setTmdbSuggestions([]);
+          setShowTmdbSuggestions(false);
         }
       }
     };
@@ -105,16 +119,15 @@ export default function AddMovieForm() {
   // Click outside handler for OMDb dropdown (schließt nur, wenn explizit außerhalb getippt wird, nicht bei Input-Blur)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
-      if (!showOmdbSuggestions) return;
-      // Prüfe, ob das Dropdown oder das Input-Feld selbst geklickt wurde
+      if (!showTmdbSuggestions) return;
       const input = document.getElementById('title');
       if (
-        omdbDropdownRef.current &&
-        !omdbDropdownRef.current.contains(event.target as Node) &&
+        tmdbDropdownRef.current &&
+        !tmdbDropdownRef.current.contains(event.target as Node) &&
         input &&
         !input.contains(event.target as Node)
       ) {
-        setShowOmdbSuggestions(false);
+        setShowTmdbSuggestions(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -123,7 +136,7 @@ export default function AddMovieForm() {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [showOmdbSuggestions]);
+  }, [showTmdbSuggestions]);
 
   const handleSuggestionClick = (suggestion: MovieSuggestion) => {
     setSelectedMovie(suggestion)
@@ -132,21 +145,27 @@ export default function AddMovieForm() {
     setShowSuggestions(false)
   }
 
-  // OMDb Auswahl
-  const handleOmdbSuggestionClick = async (omdb: OmdbSuggestion) => {
-    setTitle(omdb.Title);
-    setYear(omdb.Year);
-    setShowOmdbSuggestions(false);
+  // TMDb Auswahl
+  const [trailerUrl, setTrailerUrl] = useState<string | undefined>(undefined);
+  const handleTmdbSuggestionClick = async (tmdb: TmdbSuggestion) => {
+    setTitle(tmdb.title || tmdb.name || '');
+    const yearStr = tmdb.release_date || tmdb.first_air_date || '';
+    setYear(yearStr ? yearStr.slice(0, 4) : '');
+    setShowTmdbSuggestions(false);
+    // Typ automatisch setzen
+    let detectedType = 'film';
+    if (tmdb.media_type === 'tv') detectedType = 'serie';
+    setContentType(detectedType);
     // Details holen via API route
     try {
-      const res = await fetch(`/api/omdb?imdbID=${encodeURIComponent(omdb.imdbID)}`);
-      const details = await res.json();
-      setDirector(details.Director || '');
-      setActor(details.Actors || '');
-      setDescription(details.Plot || '');
-      setGenre(details.Genre || '');
-      setContentType('film');
-      setPosterUrl(omdb.Poster && omdb.Poster !== 'N/A' ? omdb.Poster : '');
+      const res = await fetch(`/api/tmdb?tmdbId=${tmdb.id}`);
+      const details: MovieDetails & { trailerUrl?: string } = await res.json();
+      setDirector((details as any).director || '');
+      setActor((details as any).actors || '');
+      setDescription(details.overview || '');
+      setGenre(details.genres ? details.genres.map(g => g.name).join(', ') : '');
+      setPosterUrl(details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '');
+      setTrailerUrl(details.trailerUrl);
     } catch (error) {
       // Fehlerbehandlung
     }
@@ -156,8 +175,8 @@ export default function AddMovieForm() {
     e.preventDefault()
     setIsLoading(true)
 
+    let movieId: string | undefined
     try {
-      let movieId: string
 
       if (selectedMovie) {
         // Use existing movie
@@ -174,6 +193,7 @@ export default function AddMovieForm() {
             actor: actor || null,
             year: year ? Number(year) : null,
             genre: genre || null,
+            trailer_url: trailerUrl || null,
           })
           .eq('id', movieId)
         if (updateError) {
@@ -202,6 +222,7 @@ export default function AddMovieForm() {
               actor: actor || null,
               year: year ? Number(year) : null,
               genre: genre || null,
+              trailer_url: trailerUrl || null,
             })
             .eq('id', movieId)
           if (updateError) {
@@ -224,6 +245,7 @@ export default function AddMovieForm() {
                 actor: actor || null,
                 year: year ? Number(year) : null,
                 genre: genre || null,
+                trailer_url: trailerUrl || null,
               },
             ])
             .select()
@@ -239,22 +261,47 @@ export default function AddMovieForm() {
         }
       }
 
-      // Add rating if provided
+      // Add or update rating if provided
       if (rating > 0) {
-        const { error: ratingError } = await supabase
+        // Check if rating already exists for this user/movie
+        const { data: existingRating, error: ratingFetchError } = await supabase
           .from('ratings')
-          .insert([
-            {
-              movie_id: movieId,
-              rating: rating,
-              user_id: user?.id,
-              user_name: user?.name,
-            },
-          ])
+          .select('id')
+          .eq('movie_id', movieId)
+          .eq('user_id', user?.id ?? '')
+          .maybeSingle();
 
-        if (ratingError) {
-          console.error('Rating creation error:', ratingError)
-          throw new Error(`Fehler beim Hinzufügen der Bewertung: ${ratingError.message || ratingError.details || 'Unbekannter Datenbankfehler'}`)
+        if (ratingFetchError) {
+          console.error('Rating fetch error:', ratingFetchError);
+          throw new Error(`Fehler beim Überprüfen der Bewertung: ${ratingFetchError.message || ratingFetchError.details || 'Unbekannter Datenbankfehler'}`);
+        }
+
+        if (existingRating) {
+          // Update existing rating
+          const { error: ratingUpdateError } = await supabase
+            .from('ratings')
+            .update({ rating: rating, user_name: user?.name })
+            .eq('id', (existingRating as { id?: string })?.id ?? '');
+          if (ratingUpdateError) {
+            console.error('Rating update error:', ratingUpdateError);
+            throw new Error(`Fehler beim Aktualisieren der Bewertung: ${ratingUpdateError.message || ratingUpdateError.details || 'Unbekannter Datenbankfehler'}`);
+          }
+        } else {
+          // Insert new rating
+          const { error: ratingError } = await supabase
+            .from('ratings')
+            .insert([
+              {
+                movie_id: movieId,
+                rating: rating,
+                user_id: user?.id,
+                user_name: user?.name,
+              },
+            ]);
+          if (ratingError) {
+            console.error('Rating creation error:', ratingError);
+            throw new Error(`Fehler beim Hinzufügen der Bewertung: ${ratingError.message || ratingError.details || 'Unbekannter Datenbankfehler'}`);
+          }
         }
       }
 
@@ -359,7 +406,7 @@ export default function AddMovieForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Title with OMDb Autocomplete only */}
+      {/* Title with TMDb Autocomplete only */}
       <div className="relative">
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
           Titel *
@@ -373,16 +420,16 @@ export default function AddMovieForm() {
             setSelectedMovie(null)
           }}
           onFocus={() => {
-            if (omdbSuggestions.length > 0) setShowOmdbSuggestions(true)
+            if (tmdbSuggestions.length > 0) setShowTmdbSuggestions(true)
           }}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="z.B. Mulholland Drive"
           required
         />
-        {/* OMDb Autocomplete Dropdown - fixed on mobile, absolute on desktop */}
-        {showOmdbSuggestions && omdbSuggestions.length > 0 && (
+        {/* TMDb Autocomplete Dropdown - unter dem Eingabefeld */}
+        {showTmdbSuggestions && tmdbSuggestions.length > 0 && (
           <div
-            ref={omdbDropdownRef}
+            ref={tmdbDropdownRef}
             className="absolute z-50 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto left-0"
             style={{ top: '100%' }}
           >
@@ -391,24 +438,31 @@ export default function AddMovieForm() {
               <button
                 type="button"
                 className="text-gray-500 text-lg px-2 py-1"
-                onClick={() => setShowOmdbSuggestions(false)}
+                onClick={() => setShowTmdbSuggestions(false)}
                 aria-label="Schließen"
               >
                 ✕
               </button>
             </div>
-            {omdbSuggestions.map((omdb) => (
+            {tmdbSuggestions.map((tmdb) => (
               <div
-                key={omdb.imdbID}
-                onPointerDown={() => handleOmdbSuggestionClick(omdb)}
+                key={tmdb.id}
+                onPointerDown={() => handleTmdbSuggestionClick(tmdb)}
                 className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
               >
-                {omdb.Poster && omdb.Poster !== 'N/A' && (
-                  <img src={omdb.Poster} alt={omdb.Title} className="w-8 h-12 object-cover rounded mr-2" />
+                {tmdb.poster_path && (
+                  <img src={`https://image.tmdb.org/t/p/w92${tmdb.poster_path}`} alt={tmdb.title || tmdb.name} className="w-8 h-12 object-cover rounded mr-2" />
                 )}
                 <div>
-                  <div className="font-medium text-gray-900">{omdb.Title} <span className="text-xs text-gray-500">({omdb.Year})</span></div>
-                  <div className="text-xs text-gray-500">OMDb Film</div>
+                  <span className="font-medium">{tmdb.title || tmdb.name}</span>
+                  <span className="ml-2 text-xs text-gray-500">
+                    {tmdb.media_type === 'movie' ? 'Film' : tmdb.media_type === 'tv' ? 'Serie' : ''}
+                  </span>
+                  {(tmdb.release_date || tmdb.first_air_date) && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      {((tmdb.release_date || tmdb.first_air_date) ?? '').slice(0, 4)}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -416,94 +470,8 @@ export default function AddMovieForm() {
         )}
       </div>
 
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-          Beschreibung
-        </label>
-        <textarea
-          id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Kurze Beschreibung des Films..."
-        />
-      </div>
 
-      {/* Director (only for films) */}
-      {contentType === 'film' && (
-      <div>
-        <label htmlFor="director" className="block text-sm font-medium text-gray-700">Director</label>
-        <input
-          type="text"
-          id="director"
-          value={director}
-          onChange={e => setDirector(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="e.g. David Lynch"
-        />
-      </div>
-      )}
-      {/* Actor (only for films) */}
-      {contentType === 'film' && (
-      <div>
-        <label htmlFor="actor" className="block text-sm font-medium text-gray-700">Actor</label>
-        <input
-          type="text"
-          id="actor"
-          value={actor}
-          onChange={e => setActor(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="e.g. Naomi Watts, Laura Harring"
-        />
-      </div>
-      )}
-      {/* Year (only for films) */}
-      {contentType === 'film' && (
-      <div>
-        <label htmlFor="year" className="block text-sm font-medium text-gray-700">Year</label>
-        <input
-          type="text"
-          id="year"
-          value={year}
-          onChange={e => setYear(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="e.g. 2001"
-        />
-      </div>
-      )}
-      {/* Genre (only for films) */}
-      {contentType === 'film' && (
-      <div>
-        <label htmlFor="genre" className="block text-sm font-medium text-gray-700">Genre</label>
-        <input
-          type="text"
-          id="genre"
-          value={genre}
-          onChange={e => setGenre(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="e.g. Drama, Thriller"
-        />
-      </div>
-      )}
-
-      {/* Content Type */}
-      <div>
-        <label htmlFor="contentType" className="block text-sm font-medium text-gray-700">
-          Typ *
-        </label>
-        <select
-          id="contentType"
-          value={contentType}
-          onChange={(e) => setContentType(e.target.value)}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          required
-        >
-          <option value="film">🎬 Film</option>
-          <option value="buch">📚 Buch</option>
-          <option value="serie">📺 Serie</option>
-        </select>
-      </div>
+      {/* Content Type wird automatisch gesetzt (kein Dropdown mehr) */}
 
       {/* Rating */}
       <div>
@@ -526,7 +494,7 @@ export default function AddMovieForm() {
         </div>
       </div>
 
-      <div>
+      <div className="relative">
         <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
           Tags (durch Komma getrennt)
         </label>
@@ -535,9 +503,48 @@ export default function AddMovieForm() {
           id="tags"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
+          onFocus={() => setShowTagSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowTagSuggestions(false), 100)}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="z.B. thriller, mindblow, klassiker"
+          autoComplete="off"
         />
+        {/* Tag Autocomplete Dropdown */}
+        {showTagSuggestions && allTags.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-2xl max-h-60 overflow-y-auto left-0" style={{ top: '100%' }}>
+            {allTags
+              .filter(tag => {
+                // Only show tags not already in the input
+                const inputTags = tags.split(',').map(t => t.trim().toLowerCase());
+                return tag.name && !inputTags.includes(tag.name.toLowerCase()) && (tags === '' || tag.name.toLowerCase().includes(tags.split(',').pop()?.trim().toLowerCase() || ''));
+              })
+              .slice(0, 15)
+              .map(tag => (
+                <button
+                  key={tag.name}
+                  type="button"
+                  className="block w-full text-left px-3 py-2 hover:bg-blue-100 text-sm flex items-center gap-2"
+                  style={{ color: tag.color }}
+                  onMouseDown={() => {
+                    // Add tag to input, keeping existing tags
+                    const inputTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+                    inputTags[inputTags.length - 1] = tag.name; // Replace last partial with selected
+                    setTags(inputTags.join(', ') + ', ');
+                    setShowTagSuggestions(false);
+                  }}
+                >
+                  <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tag.color }}></span>
+                  {tag.name}
+                </button>
+              ))}
+            {allTags.filter(tag => {
+              const inputTags = tags.split(',').map(t => t.trim().toLowerCase());
+              return tag.name && !inputTags.includes(tag.name.toLowerCase()) && (tags === '' || tag.name.toLowerCase().includes(tags.split(',').pop()?.trim().toLowerCase() || ''));
+            }).length === 0 && (
+              <div className="px-3 py-2 text-gray-400 text-sm">Keine passenden Tags</div>
+            )}
+          </div>
+        )}
       </div>
 
       <button

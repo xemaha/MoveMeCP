@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS movies (
   description TEXT,
   content_type VARCHAR(50) DEFAULT 'film' CHECK (content_type IN ('film', 'buch', 'serie')),
   created_by VARCHAR(255),
+  trailer_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

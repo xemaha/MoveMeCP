@@ -22,7 +22,8 @@ export function MovieCard({ movie }: MovieCardProps) {
       if (error) throw error
 
       if (data && data.length > 0) {
-        const avg = data.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / data.length
+        // Ensure r.rating is number
+        const avg = data.reduce((sum: number, r: any) => sum + Number(r.rating), 0) / data.length
         setAverageRating(avg)
       }
     } catch (error) {
@@ -88,11 +89,26 @@ export function MovieCard({ movie }: MovieCardProps) {
           </span>
         )}
       </div>
-      
+
       {movie.description && (
         <p className="text-gray-600 mb-3">{movie.description}</p>
       )}
-      
+
+      {/* YouTube Trailer Button */}
+      {movie.trailer_url && (
+        <div className="mb-3">
+          <a
+            href={movie.trailer_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs font-medium gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4"><path d="M23.498 6.186a2.994 2.994 0 0 0-2.107-2.117C19.228 3.5 12 3.5 12 3.5s-7.228 0-9.391.569A2.994 2.994 0 0 0 .502 6.186C0 8.36 0 12 0 12s0 3.64.502 5.814a2.994 2.994 0 0 0 2.107 2.117C4.772 20.5 12 20.5 12 20.5s7.228 0 9.391-.569a2.994 2.994 0 0 0 2.107-2.117C24 15.64 24 12 24 12s0-3.64-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            YouTube Trailer
+          </a>
+        </div>
+      )}
+
       <div className="space-y-2">
         {averageRating > 0 && (
           <div className="flex items-center gap-2">
@@ -101,7 +117,7 @@ export function MovieCard({ movie }: MovieCardProps) {
             <span className="text-sm text-gray-500">({averageRating.toFixed(1)})</span>
           </div>
         )}
-        
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">Bewerten:</span>
           <div className="flex">{renderStars(rating, true)}</div>

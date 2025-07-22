@@ -1,3 +1,19 @@
+// TMDb MovieDetails für API-Integration
+export interface MovieDetails {
+  id: number;
+  title: string;
+  overview?: string;
+  release_date?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  genres?: { id: number; name: string }[];
+  vote_average?: number;
+  vote_count?: number;
+  runtime?: number;
+  tagline?: string;
+  original_language?: string;
+  videos?: any;
+}
 export interface User {
   id: string
   name: string
@@ -15,6 +31,7 @@ export interface Movie {
   creator_name?: string
   actor?: string
   director?: string
+  trailer_url?: string
 }
 
 export interface Rating {
