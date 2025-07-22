@@ -5,10 +5,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const title = searchParams.get('title');
   const tmdbId = searchParams.get('tmdbId');
+  const mediaType = searchParams.get('mediaType');
 
   if (tmdbId) {
     try {
-      const details = await getTMDbDetails(Number(tmdbId));
+      // mediaType: 'movie' | 'tv' (default: 'movie')
+      const details = await getTMDbDetails(Number(tmdbId), mediaType === 'tv' ? 'tv' : 'movie');
       return NextResponse.json(details);
     } catch (e) {
       return NextResponse.json({ error: 'TMDb details fetch failed' }, { status: 500 });

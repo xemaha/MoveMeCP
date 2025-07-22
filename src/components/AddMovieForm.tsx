@@ -138,11 +138,18 @@ export default function AddMovieForm() {
     };
   }, [showTmdbSuggestions]);
 
+  // Merker, ob nach Supabase-Auswahl noch eine TMDb-Auswahl kam
+  const [tmdbSelected, setTmdbSelected] = useState(false);
+
   const handleSuggestionClick = (suggestion: MovieSuggestion) => {
-    setSelectedMovie(suggestion)
-    setTitle(suggestion.title)
-    setContentType(suggestion.content_type)
-    setShowSuggestions(false)
+    setSelectedMovie(suggestion);
+    setTitle(suggestion.title);
+    // Nur setzen, wenn nicht direkt danach eine TMDb-Auswahl kommt
+    if (!tmdbSelected) {
+      setContentType(suggestion.content_type);
+    }
+    setShowSuggestions(false);
+    setTmdbSelected(false); // Reset, falls wieder Supabase gewählt wird
   }
 
   // TMDb Auswahl
@@ -154,11 +161,17 @@ export default function AddMovieForm() {
     setShowTmdbSuggestions(false);
     // Typ automatisch setzen
     let detectedType = 'film';
-    if (tmdb.media_type === 'tv') detectedType = 'serie';
+    let apiMediaType: 'movie' | 'tv' = 'movie';
+    if (tmdb.media_type === 'tv') {
+      detectedType = 'serie';
+      apiMediaType = 'tv';
+    }
     setContentType(detectedType);
+    setTmdbSelected(true); // Merker setzen, damit Supabase-Auswahl nicht Typ überschreibt
+    setSelectedMovie(null); // Wichtig: Supabase-Auswahl zurücksetzen, damit alle Felder übernommen werden
     // Details holen via API route
     try {
-      const res = await fetch(`/api/tmdb?tmdbId=${tmdb.id}`);
+      const res = await fetch(`/api/tmdb?tmdbId=${tmdb.id}&mediaType=${apiMediaType}`);
       const details: MovieDetails & { trailerUrl?: string } = await res.json();
       setDirector((details as any).director || '');
       setActor((details as any).actors || '');
@@ -178,13 +191,28 @@ export default function AddMovieForm() {
     let movieId: string | undefined
     try {
 
+      // Immer: Check ob Film/Serie schon existiert (case-insensitive)
+      let movieExists = false;
       if (selectedMovie) {
-        // Use existing movie
-        movieId = selectedMovie.id
-        // Update movie fields with new values (except tags/ratings)
+        movieId = selectedMovie.id;
+        movieExists = true;
+      } else {
+        const { data: existingMovies } = await supabase
+          .from('movies')
+          .select('*')
+          .ilike('title', title.trim());
+        if (existingMovies && existingMovies.length > 0) {
+          movieId = existingMovies[0].id as string;
+          movieExists = true;
+        }
+      }
+
+      if (movieExists) {
+        // Update movie fields with current state (immer State verwenden!)
         const { error: updateError } = await supabase
           .from('movies')
           .update({
+            title: title.trim(),
             description: description.trim() || null,
             content_type: contentType,
             created_by: user?.name || 'Unbekannt',
@@ -195,25 +223,19 @@ export default function AddMovieForm() {
             genre: genre || null,
             trailer_url: trailerUrl || null,
           })
-          .eq('id', movieId)
+          .eq('id', movieId ?? '');
         if (updateError) {
-          console.error('Movie update error:', updateError)
-          throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`)
+          console.error('Movie update error:', updateError);
+          throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`);
         }
-        console.log('Eintrag existiert bereits, Felder wurden aktualisiert, füge Tags/Bewertung hinzu')
+        console.log('Eintrag existiert bereits, Felder wurden aktualisiert, füge Tags/Bewertung hinzu');
       } else {
-        // Check if movie already exists (case-insensitive)
-        const { data: existingMovies } = await supabase
+        // Create new movie
+        const { data: newMovie, error: movieError } = await supabase
           .from('movies')
-          .select('*')
-          .ilike('title', title.trim())
-
-        if (existingMovies && existingMovies.length > 0) {
-          movieId = existingMovies[0].id as string
-          // Update movie fields with new values (except tags/ratings)
-          const { error: updateError } = await supabase
-            .from('movies')
-            .update({
+          .insert([
+            {
+              title: title.trim(),
               description: description.trim() || null,
               content_type: contentType,
               created_by: user?.name || 'Unbekannt',
@@ -223,42 +245,16 @@ export default function AddMovieForm() {
               year: year ? Number(year) : null,
               genre: genre || null,
               trailer_url: trailerUrl || null,
-            })
-            .eq('id', movieId)
-          if (updateError) {
-            console.error('Movie update error:', updateError)
-            throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`)
-          }
-          console.log('Eintrag existiert bereits, Felder wurden aktualisiert, füge Tags/Bewertung hinzu')
-        } else {
-          // Create new movie
-          const { data: newMovie, error: movieError } = await supabase
-            .from('movies')
-            .insert([
-              {
-                title: title.trim(),
-                description: description.trim() || null,
-                content_type: contentType,
-                created_by: user?.name || 'Unbekannt',
-                poster_url: posterUrl || null,
-                director: director || null,
-                actor: actor || null,
-                year: year ? Number(year) : null,
-                genre: genre || null,
-                trailer_url: trailerUrl || null,
-              },
-            ])
-            .select()
-            .single()
-
-          if (movieError) {
-            console.error('Movie creation error:', movieError)
-            throw new Error(`Fehler beim Erstellen des Eintrags: ${movieError.message || movieError.details || 'Unbekannter Datenbankfehler'}`)
-          }
-          
-          movieId = newMovie.id as string
-          console.log('Neuer Eintrag erstellt')
+            },
+          ])
+          .select()
+          .single();
+        if (movieError) {
+          console.error('Movie creation error:', movieError);
+          throw new Error(`Fehler beim Erstellen des Eintrags: ${movieError.message || movieError.details || 'Unbekannter Datenbankfehler'}`);
         }
+        movieId = newMovie.id as string;
+        console.log('Neuer Eintrag erstellt');
       }
 
       // Add or update rating if provided
@@ -267,7 +263,7 @@ export default function AddMovieForm() {
         const { data: existingRating, error: ratingFetchError } = await supabase
           .from('ratings')
           .select('id')
-          .eq('movie_id', movieId)
+          .eq('movie_id', movieId ?? '')
           .eq('user_id', user?.id ?? '')
           .maybeSingle();
 
@@ -375,6 +371,7 @@ export default function AddMovieForm() {
       setSelectedMovie(null)
       setSuggestions([])
       setShowSuggestions(false)
+      setTmdbSelected(false)
       
       // Refresh the page to show updated data
       window.location.reload()
@@ -447,7 +444,14 @@ export default function AddMovieForm() {
             {tmdbSuggestions.map((tmdb) => (
               <div
                 key={tmdb.id}
-                onPointerDown={() => handleTmdbSuggestionClick(tmdb)}
+                onClick={async () => {
+                  await handleTmdbSuggestionClick(tmdb);
+                  // Nach Auswahl Fokus auf das nächste Feld (z.B. Beschreibung)
+                  setTimeout(() => {
+                    const descInput = document.getElementById('description');
+                    if (descInput) (descInput as HTMLInputElement).focus();
+                  }, 0);
+                }}
                 className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
               >
                 {tmdb.poster_path && (
@@ -468,9 +472,26 @@ export default function AddMovieForm() {
             ))}
           </div>
         )}
+
+        {/* Poster Preview (direkt nach TMDb-Auswahl) */}
+        {posterUrl && (
+          <div className="mt-2 flex justify-center transition-all animate-fade-in">
+            <img
+              src={posterUrl}
+              alt="Poster Preview"
+              className="rounded shadow max-h-64"
+              style={{ maxWidth: '180px', objectFit: 'contain' }}
+            />
+          </div>
+        )}
       </div>
 
 
+
+      {/* Beschreibung (damit der Fokus nach TMDb-Auswahl gesetzt werden kann) */}
+      <div style={{ display: 'none' }}>
+        <input id="description" value={description} readOnly tabIndex={-1} />
+      </div>
       {/* Content Type wird automatisch gesetzt (kein Dropdown mehr) */}
 
       {/* Rating */}

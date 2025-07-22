@@ -81,6 +81,17 @@ export function MovieCard({ movie }: MovieCardProps) {
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+      {/* Poster Preview */}
+      {movie.poster_url && (
+        <div className="flex justify-center mb-3">
+          <img
+            src={movie.poster_url}
+            alt={movie.title}
+            className="max-h-48 rounded shadow"
+            style={{ maxWidth: '120px', objectFit: 'contain', background: '#eee' }}
+          />
+        </div>
+      )}
       <div className="flex justify-between items-start mb-2">
         <h3 className="text-lg font-semibold text-gray-900">{movie.title}</h3>
         {movie.year && (

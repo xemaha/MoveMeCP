@@ -18,9 +18,9 @@ export async function searchTMDb(title: string) {
   return data.results.filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv');
 }
 
-export async function getTMDbDetails(movieId: number): Promise<MovieDetails & { trailerUrl?: string, director?: string, actors?: string }> {
-  // Hole Movie-Details inkl. Videos und Credits (Cast & Crew)
-  const url = `${TMDB_BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=videos,credits`;
+export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<MovieDetails & { trailerUrl?: string, director?: string, actors?: string }> {
+  // Hole Movie- oder Serien-Details inkl. Videos und Credits (Cast & Crew)
+  const url = `${TMDB_BASE_URL}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=videos,credits`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('TMDb details failed');
   const data = await res.json();
@@ -29,10 +29,10 @@ export async function getTMDbDetails(movieId: number): Promise<MovieDetails & { 
     const yt = data.videos.results.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer');
     if (yt) trailerUrl = `https://www.youtube.com/watch?v=${yt.key}`;
   }
-  // Regisseur extrahieren
+  // Regisseur extrahieren (bei Serien: "Director" oder "Regisseur")
   let director = '';
   if (data.credits && data.credits.crew) {
-    const dir = data.credits.crew.find((c: any) => c.job === 'Director');
+    const dir = data.credits.crew.find((c: any) => c.job === 'Director' || c.job === 'Regisseur');
     if (dir) director = dir.name;
   }
   // Hauptdarsteller extrahieren (max. 3)
