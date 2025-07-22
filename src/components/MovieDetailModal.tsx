@@ -128,11 +128,33 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
       if (error) {
         console.error("Supabase update error:", error);
         alert("Fehler beim Aktualisieren des Films: " + (error.message || error.details || error.toString()));
-      } else {
-        onMovieUpdated();
-        onClose();
+        setIsLoading(false);
+        return;
       }
-    } catch {
+
+      // --- Tag-Zuordnung aktualisieren ---
+      // 1. Alle bisherigen Tags für diesen Film löschen
+      await supabase.from("movie_tags").delete().eq("movie_id", movie.id);
+      // 2. Neue Tags einfügen
+      if (selectedTags.length > 0) {
+        const tagInserts = selectedTags.map(tagName => {
+          const tag = allTags.find(t => t.name === tagName);
+          return tag && tag.id ? { movie_id: movie.id, tag_id: tag.id } : undefined;
+        }).filter((v): v is { movie_id: string; tag_id: string } => !!v);
+        if (tagInserts.length > 0) {
+          const { error: tagError } = await supabase.from("movie_tags").insert(tagInserts);
+          if (tagError) {
+            console.error("Fehler beim Speichern der Tags:", tagError);
+            alert("Fehler beim Speichern der Tags: " + (tagError.message || tagError.details || tagError.toString()));
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      onMovieUpdated();
+      onClose();
+    } catch (e) {
       alert("Fehler beim Speichern");
     } finally {
       setIsLoading(false);

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
 import { searchOMDb, getOMDbDetails } from '@/lib/omdbApi'
@@ -41,6 +41,8 @@ export default function AddMovieForm() {
   const [posterUrl, setPosterUrl] = useState('')
 
   // Autocomplete für Filme (Supabase + OMDb)
+  // Click outside ref for OMDb dropdown
+  const omdbDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (title.trim().length < 2) {
@@ -50,7 +52,6 @@ export default function AddMovieForm() {
         setShowOmdbSuggestions(false)
         return
       }
-
       // Supabase interne Suche
       try {
         const { data: movies, error } = await supabase
@@ -58,7 +59,6 @@ export default function AddMovieForm() {
           .select('id, title, content_type, created_by')
           .ilike('title', `%${title.trim()}%`)
           .limit(5)
-
         if (!error && movies && movies.length > 0) {
           setSuggestions(movies.map(movie => ({
             id: movie.id as string,
@@ -75,7 +75,6 @@ export default function AddMovieForm() {
         setSuggestions([])
         setShowSuggestions(false)
       }
-
       // OMDb Suche (nur für Filme)
       if (contentType === 'film') {
         try {
@@ -94,6 +93,23 @@ export default function AddMovieForm() {
     const timer = setTimeout(fetchSuggestions, 300)
     return () => clearTimeout(timer)
   }, [title, contentType])
+
+  // Click outside handler for OMDb dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (omdbDropdownRef.current && !omdbDropdownRef.current.contains(event.target as Node)) {
+        setShowOmdbSuggestions(false);
+      }
+    }
+    if (showOmdbSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showOmdbSuggestions]);
 
   const handleSuggestionClick = (suggestion: MovieSuggestion) => {
     setSelectedMovie(suggestion)
@@ -337,9 +353,6 @@ export default function AddMovieForm() {
             setTitle(e.target.value)
             setSelectedMovie(null)
           }}
-          onBlur={() => {
-            setTimeout(() => { setShowOmdbSuggestions(false); }, 200)
-          }}
           onFocus={() => {
             if (omdbSuggestions.length > 0) setShowOmdbSuggestions(true)
           }}
@@ -349,11 +362,11 @@ export default function AddMovieForm() {
         />
         {/* OMDb Autocomplete Dropdown */}
         {showOmdbSuggestions && omdbSuggestions.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-lg max-h-60 overflow-y-auto left-0">
+          <div ref={omdbDropdownRef} className="absolute z-10 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-lg max-h-60 overflow-y-auto left-0">
             {omdbSuggestions.map((omdb) => (
               <div
                 key={omdb.imdbID}
-                onClick={() => handleOmdbSuggestionClick(omdb)}
+                onMouseDown={() => handleOmdbSuggestionClick(omdb)}
                 className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
               >
                 {omdb.Poster && omdb.Poster !== 'N/A' && (
