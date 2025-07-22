@@ -38,7 +38,8 @@ export default function AddMovieForm() {
   }, []);
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [contentType, setContentType] = useState('film') // Wird jetzt automatisch gesetzt
+  // Typ-Auswahl: film | serie | buch
+  const [contentType, setContentType] = useState<'film' | 'serie' | 'buch'>('film')
   const [rating, setRating] = useState<number>(0)
   const [tags, setTags] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -68,7 +69,7 @@ export default function AddMovieForm() {
         setShowTmdbSuggestions(false);
         return;
       }
-      // Supabase interne Suche
+      // Supabase interne Suche (immer)
       try {
         const { data: movies, error } = await supabase
           .from('movies')
@@ -92,24 +93,31 @@ export default function AddMovieForm() {
       } catch (error) {
         // Fehlerbehandlung
       }
-      // TMDb Autocomplete via API route
-      try {
-        const res = await fetch(`/api/tmdb?title=${encodeURIComponent(title.trim())}`);
-        const data = await res.json();
-        if (!ignore) {
-          if (data && data.results && data.results.length > 0) {
-            setTmdbSuggestions(data.results);
-            setShowTmdbSuggestions(true);
-          } else {
+      // TMDb Autocomplete nur für Film/Serie
+      if (contentType === 'film' || contentType === 'serie') {
+        try {
+          const tmdbType = contentType === 'film' ? 'movie' : 'tv';
+          const res = await fetch(`/api/tmdb?title=${encodeURIComponent(title.trim())}`);
+          const data = await res.json();
+          if (!ignore) {
+            if (data && data.results && data.results.length > 0) {
+              // Filtere nach Typ
+              setTmdbSuggestions(data.results.filter((r: any) => r.media_type === tmdbType));
+              setShowTmdbSuggestions(true);
+            } else {
+              setTmdbSuggestions([]);
+              setShowTmdbSuggestions(false);
+            }
+          }
+        } catch (error) {
+          if (!ignore) {
             setTmdbSuggestions([]);
             setShowTmdbSuggestions(false);
           }
         }
-      } catch (error) {
-        if (!ignore) {
-          setTmdbSuggestions([]);
-          setShowTmdbSuggestions(false);
-        }
+      } else {
+        setTmdbSuggestions([]);
+        setShowTmdbSuggestions(false);
       }
     };
     fetchSuggestions();
@@ -146,7 +154,7 @@ export default function AddMovieForm() {
     setTitle(suggestion.title);
     // Nur setzen, wenn nicht direkt danach eine TMDb-Auswahl kommt
     if (!tmdbSelected) {
-      setContentType(suggestion.content_type);
+    setContentType(suggestion.content_type as 'film' | 'serie' | 'buch');
     }
     setShowSuggestions(false);
     setTmdbSelected(false); // Reset, falls wieder Supabase gewählt wird
@@ -166,7 +174,7 @@ export default function AddMovieForm() {
       detectedType = 'serie';
       apiMediaType = 'tv';
     }
-    setContentType(detectedType);
+    setContentType(detectedType as 'film' | 'serie' | 'buch');
     setTmdbSelected(true); // Merker setzen, damit Supabase-Auswahl nicht Typ überschreibt
     setSelectedMovie(null); // Wichtig: Supabase-Auswahl zurücksetzen, damit alle Felder übernommen werden
     // Details holen via API route
@@ -401,9 +409,35 @@ export default function AddMovieForm() {
     }
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Title with TMDb Autocomplete only */}
+
+    return (
+      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Typ Dropdown */}
+      <div>
+        <label htmlFor="contentType" className="block text-sm font-medium text-gray-700 mb-1">Typ *</label>
+        <select
+          id="contentType"
+          value={contentType}
+          onChange={e => {
+            setContentType(e.target.value as 'film' | 'serie' | 'buch');
+            setTmdbSuggestions([]);
+            setShowTmdbSuggestions(false);
+            setPosterUrl('');
+            setDirector('');
+            setActor('');
+            setDescription('');
+            setGenre('');
+            setTrailerUrl(undefined);
+          }}
+          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="film">Film</option>
+          <option value="serie">Serie</option>
+          <option value="buch">Buch</option>
+        </select>
+      </div>
+
+      {/* Title Input (mit/ohne Autocomplete je nach Typ) */}
       <div className="relative">
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
           Titel *
@@ -417,14 +451,17 @@ export default function AddMovieForm() {
             setSelectedMovie(null)
           }}
           onFocus={() => {
-            if (tmdbSuggestions.length > 0) setShowTmdbSuggestions(true)
+            if (contentType !== 'buch' && tmdbSuggestions.length > 0) setShowTmdbSuggestions(true)
           }}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="z.B. Mulholland Drive"
+          placeholder={contentType === 'buch' ? 'z.B. Der Steppenwolf' : 'z.B. Mulholland Drive'}
           required
+          autoComplete="off"
+          disabled={isLoading}
         />
-        {/* TMDb Autocomplete Dropdown - unter dem Eingabefeld */}
-        {showTmdbSuggestions && tmdbSuggestions.length > 0 && (
+
+        {/* TMDb Autocomplete Dropdown - nur für Film/Serie */}
+        {contentType !== 'buch' && showTmdbSuggestions && tmdbSuggestions.length > 0 && (
           <div
             ref={tmdbDropdownRef}
             className="absolute z-50 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto left-0"
@@ -576,5 +613,5 @@ export default function AddMovieForm() {
         {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
       </button>
     </form>
-  )
+  );
 }
