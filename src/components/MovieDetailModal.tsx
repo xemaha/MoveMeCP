@@ -414,12 +414,12 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                 Abbrechen
               </button>
               <button
-                onClick={handleSave}
-                className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                disabled={isLoading}
+                onClick={() => setSelectedTags([])}
+                className="flex-1 sm:flex-none px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
                 type="button"
+                disabled={selectedTags.length === 0}
               >
-                {isLoading ? 'Speichern...' : 'Speichern'}
+                Alle Tags abwählen
               </button>
             </div>
           </div>

@@ -605,13 +605,7 @@ export function MovieList() {
             🏷️ Nach Tags
           </button>
         </div>
-        <button
-          onClick={fetchMoviesWithDetails}
-          disabled={isLoading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? '� Speichert...' : '� Speichern'}
-        </button>
+        {/* Refresh-Button entfernt, da kein expliziter Speichern-Button gewünscht */}
       </div>
 
       {/* Search and Filter Controls */}
@@ -695,27 +689,34 @@ export function MovieList() {
               max={5}
               values={[userFilter.minRating ?? 0, userFilter.maxRating ?? 5]}
               onChange={(values: number[]) => setUserFilter({ ...userFilter, minRating: values[0], maxRating: values[1] })}
-              renderTrack={({ props, children }: RangeTrackProps) => (
-                <div {...props} className="h-2 w-full rounded bg-gray-200 my-4" style={{ ...props.style }}>
-                  <div className="h-2 rounded bg-yellow-400" style={{
-                    position: 'absolute',
-                    left: `${((userFilter.minRating ?? 0) / 5) * 100}%`,
-                    width: `${(((userFilter.maxRating ?? 5) - (userFilter.minRating ?? 0)) / 5) * 100}%`,
-                    top: 0,
-                    bottom: 0
-                  }} />
-                  {children}
-                </div>
-              )}
-              renderThumb={({ props, index }: RangeThumbProps) => (
-                <div
-                  {...props}
-                  className="w-5 h-5 bg-yellow-400 border-2 border-yellow-600 rounded-full flex items-center justify-center shadow"
-                  style={{ ...props.style }}
-                >
-                  <span className="text-xs font-bold text-white select-none">{[userFilter.minRating ?? 0, userFilter.maxRating ?? 5][index]}</span>
-                </div>
-              )}
+              renderTrack={({ props, children }: RangeTrackProps) => {
+                const { key, ...rest } = props;
+                return (
+                  <div key={key} {...rest} className="h-2 w-full rounded bg-gray-200 my-4" style={{ ...props.style }}>
+                    <div className="h-2 rounded bg-yellow-400" style={{
+                      position: 'absolute',
+                      left: `${((userFilter.minRating ?? 0) / 5) * 100}%`,
+                      width: `${(((userFilter.maxRating ?? 5) - (userFilter.minRating ?? 0)) / 5) * 100}%`,
+                      top: 0,
+                      bottom: 0
+                    }} />
+                    {children}
+                  </div>
+                );
+              }}
+              renderThumb={({ props, index }: RangeThumbProps) => {
+                const { key, ...rest } = props;
+                return (
+                  <div
+                    key={key}
+                    {...rest}
+                    className="w-5 h-5 bg-yellow-400 border-2 border-yellow-600 rounded-full flex items-center justify-center shadow"
+                    style={{ ...props.style }}
+                  >
+                    <span className="text-xs font-bold text-white select-none">{[userFilter.minRating ?? 0, userFilter.maxRating ?? 5][index]}</span>
+                  </div>
+                );
+              }}
             />
             <div className="flex justify-between text-xs text-gray-500 w-full px-1">
               <span>0</span>
