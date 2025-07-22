@@ -53,6 +53,8 @@ interface MovieWithDetails extends Movie {
   averageRating: number
   ratingCount: number
   ratings: Rating[]
+  actor?: string
+  director?: string
 }
 
 interface UserRatingFilter {
@@ -347,10 +349,14 @@ export function MovieList() {
 
   // Filter movies based on search and user rating filter
   const filteredMovies = movies.filter(movie => {
-    // Text search
-    const matchesSearch = movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         movie.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         movie.tags.some(tag => tag.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    // Text search (now also includes actors and director)
+    const lowerQuery = searchQuery.toLowerCase();
+    const matchesSearch =
+      movie.title.toLowerCase().includes(lowerQuery) ||
+      movie.description?.toLowerCase().includes(lowerQuery) ||
+      movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery)) ||
+      (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
+      (movie.director && movie.director.toLowerCase().includes(lowerQuery));
 
     // Rating filter: if user is selected, filter by their rating; otherwise, filter by averageRating
     let matchesRatingFilter = true
@@ -580,6 +586,7 @@ export function MovieList() {
   const allTagsSorted = [...allTags].sort((a, b) => a.name.localeCompare(b.name))
 
   return (
+    <>
     <div className="space-y-6">
       {/* View Mode Toggle and Refresh Button */}
       <div className="flex justify-center items-center gap-4">
@@ -680,6 +687,7 @@ export function MovieList() {
                 ))}
               </select>
             </div>
+          </div>
           </div>
           {/* Rating slider directly under user dropdown, no label or extra text */}
           <div className="flex flex-col gap-2 w-full mt-4">
@@ -785,7 +793,7 @@ export function MovieList() {
         </div>
       </div>
 
-      {/* Results Info */}
+      
       <div className="text-sm text-gray-600">
         {filteredMovies.length} {filteredMovies.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
       </div>
@@ -805,123 +813,138 @@ export function MovieList() {
             return (b.averageRating || 0) - (a.averageRating || 0)
           })
           .map((movie) => (
-          <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group sm:p-0 p-0">
-            <div className="p-4 sm:p-6" onClick={() => setSelectedMovieForEdit(movie)}>
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate max-w-[70vw]">{movie.title}</h3>
-                    <span className="text-sm text-gray-400 group-hover:text-blue-600 transition-colors">✏️</span>
+            <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group flex flex-col sm:p-0 p-0">
+              <div className="flex flex-col h-full" onClick={() => setSelectedMovieForEdit(movie)}>
+                {/* Movie Poster */}
+                {movie.poster_url ? (
+                  <div className="w-full h-60 bg-gray-100 flex items-center justify-center overflow-hidden">
+                    <img
+                      src={movie.poster_url}
+                      alt={movie.title}
+                      className="object-cover w-full h-full transition-transform duration-200 group-hover:scale-105"
+                      style={{ maxHeight: '240px', minHeight: '180px', background: '#eee' }}
+                    />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      {movie.content_type === 'film' ? '🎬' : movie.content_type === 'serie' ? '📺' : '📚'} {movie.content_type}
-                    </span>
-                    {movie.created_by && (
-                      <span className="text-xs text-gray-500">von {movie.created_by}</span>
-                    )}
+                ) : (
+                  <div className="w-full h-60 bg-gray-200 flex items-center justify-center text-gray-400 text-5xl">
+                    <span>🎬</span>
                   </div>
-                </div>
-              </div>
-
-              {movie.description && (
-                <p className="text-gray-600 text-sm mb-2 line-clamp-2 sm:line-clamp-3">{movie.description}</p>
-              )}
-
-              {/* Tags */}
-
-              {movie.tags.length > 0 && (
-                <TagListDisplay tags={movie.tags} />
-              )}
-
-
-              {/* Average Rating */}
-              <div className="flex items-center justify-between mb-2 text-sm sm:text-base">
-                <div className="flex items-center space-x-2">
-                  <div className="flex">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <span
-                        key={star}
-                        className={`text-lg ${
-                          star <= movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
-                        }`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                  </div>
-                  <span className="text-sm text-gray-600">
-                    {movie.averageRating.toFixed(1)} ({movie.ratingCount} Bewertungen)
-                  </span>
-                </div>
-              </div>
-
-              {/* User's Personal Rating */}
-              {user && (
-                <div className="mb-2 p-2 sm:p-3 bg-blue-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">
-                    Deine Bewertung ({user.name}):
-                  </h4>
-                  <div className="flex items-center space-x-1 text-lg sm:text-xl">
-                    {[1, 2, 3, 4, 5].map((star) => {
-                      const userRating = getUserRating(movie.ratings, user.id)
-                      const isActive = star <= userRating
-                      return (
-                        <button
-                          key={star}
-                          onClick={() => handleStarClick(movie.id, star)}
-                          className={`w-6 h-6 text-lg transition-colors hover:scale-110 ${
-                            isActive ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
-                          }`}
-                        >
-                          ★
-                        </button>
-                      )
-                    })}
-                    <span className="text-sm text-gray-600 ml-2">
-                      {getUserRating(movie.ratings, user.id) > 0 
-                        ? `${getUserRating(movie.ratings, user.id)} Sterne` 
-                        : 'Noch nicht bewertet'}
-                    </span>
-                    {/* Button to delete rating */}
-                    {getUserRating(movie.ratings, user.id) > 0 && (
-                      <button
-                        onClick={() => handleDeleteRating(movie.id)}
-                        className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
-                        title="Bewertung löschen"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                </div>
-              )}
-
-              {/* Individual User Ratings */}
-              {movie.ratings.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-200 text-xs sm:text-sm">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">User-Bewertungen:</h4>
-                  <div className="space-y-1">
-                    {movie.ratings.map((rating, index) => (
-                      <div key={index} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600">{rating.user_name}</span>
-                        <div className="flex items-center">
-                          <span className="text-yellow-400 mr-1">
-                            {'★'.repeat(rating.rating)}
-                          </span>
-                          <span className="text-gray-400">
-                            {'☆'.repeat(5 - rating.rating)}
-                          </span>
-                        </div>
+                )}
+                <div className="p-4 sm:p-6 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate max-w-[70vw]">{movie.title}</h3>
+                        <span className="text-sm text-gray-400 group-hover:text-blue-600 transition-colors">✏️</span>
                       </div>
-                    ))}
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                          {movie.content_type === 'film' ? '🎬' : movie.content_type === 'serie' ? '📺' : '📚'} {movie.content_type}
+                        </span>
+                        {movie.created_by && (
+                          <span className="text-xs text-gray-500">von {movie.created_by}</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
+
+                  {movie.description && (
+                    <p className="text-gray-600 text-sm mb-2 line-clamp-2 sm:line-clamp-3">{movie.description}</p>
+                  )}
+
+                  {/* Tags */}
+                  {movie.tags.length > 0 && (
+                    <TagListDisplay tags={movie.tags} />
+                  )}
+
+                  {/* Average Rating */}
+                  <div className="flex items-center justify-between mb-2 text-sm sm:text-base">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span
+                            key={star}
+                            className={`text-lg ${
+                              star <= movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                            }`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {movie.averageRating.toFixed(1)} ({movie.ratingCount} Bewertungen)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* User's Personal Rating */}
+                  {user && (
+                    <div className="mb-2 p-2 sm:p-3 bg-blue-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">
+                        Deine Bewertung ({user.name}):
+                      </h4>
+                      <div className="flex items-center space-x-1 text-lg sm:text-xl">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const userRating = getUserRating(movie.ratings, user.id)
+                          const isActive = star <= userRating
+                          return (
+                            <button
+                              key={star}
+                              onClick={() => handleStarClick(movie.id, star)}
+                              className={`w-6 h-6 text-lg transition-colors hover:scale-110 ${
+                                isActive ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
+                              }`}
+                            >
+                              ★
+                            </button>
+                          )
+                        })}
+                        <span className="text-sm text-gray-600 ml-2">
+                          {getUserRating(movie.ratings, user.id) > 0 
+                            ? `${getUserRating(movie.ratings, user.id)} Sterne` 
+                            : 'Noch nicht bewertet'}
+                        </span>
+                        {/* Button to delete rating */}
+                        {getUserRating(movie.ratings, user.id) > 0 && (
+                          <button
+                            onClick={() => handleDeleteRating(movie.id)}
+                            className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                            title="Bewertung löschen"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* Individual User Ratings */}
+                  {movie.ratings.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 text-xs sm:text-sm">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">User-Bewertungen:</h4>
+                      <div className="space-y-1">
+                        {movie.ratings.map((rating, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">{rating.user_name}</span>
+                            <div className="flex items-center">
+                              <span className="text-yellow-400 mr-1">
+                                {'★'.repeat(rating.rating)}
+                              </span>
+                              <span className="text-gray-400">
+                                {'☆'.repeat(5 - rating.rating)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
         </div>
       ) : (
         /* Tag-Based View */
@@ -991,10 +1014,10 @@ export function MovieList() {
       )}
 
       {/* Movie Detail Modal */}
-      {selectedMovieForEdit && (
+      {selectedMovieForEdit !== null && (
         <MovieDetailModal
           movie={selectedMovieForEdit}
-          isOpen={!!selectedMovieForEdit}
+          isOpen={true}
           onClose={() => setSelectedMovieForEdit(null)}
           onMovieUpdated={() => {
             fetchMoviesWithDetails()
@@ -1002,6 +1025,6 @@ export function MovieList() {
           }}
         />
       )}
-    </div>
+    </>
   )
 }

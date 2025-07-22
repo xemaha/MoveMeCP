@@ -1,0 +1,6 @@
+// Patch für AddMovieForm.tsx: OMDb-Autocomplete für Filme, Felder: RegisseurIn, SchauspielerIn, Jahr
+// 1. Importiere OMDb-API-Helper
+// 2. Baue Autocomplete für Filme (nur wenn contentType === 'film')
+// 3. Füge Felder für RegisseurIn, SchauspielerIn, Jahr hinzu und befülle sie automatisch
+// 4. Bei Auswahl eines OMDb-Treffers: Felder setzen
+// 5. Google Books analog für Bücher (später)

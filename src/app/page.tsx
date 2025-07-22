@@ -1,7 +1,7 @@
 'use client'
 
 import { MovieList } from '@/components/MovieList'
-import { AddMovieForm } from '@/components/AddMovieForm'
+import AddMovieForm from '@/components/AddMovieForm'
 import { UserProvider, useUser } from '@/lib/UserContext'
 import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'

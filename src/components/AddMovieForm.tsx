@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
+import { searchOMDb, getOMDbDetails } from '@/lib/omdbApi'
 
 interface MovieSuggestion {
   id: string
@@ -11,7 +12,15 @@ interface MovieSuggestion {
   creator_name?: string
 }
 
-export function AddMovieForm() {
+interface OmdbSuggestion {
+  imdbID: string
+  Title: string
+  Year: string
+  Type: string
+  Poster: string
+}
+
+export default function AddMovieForm() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [contentType, setContentType] = useState('film')
@@ -22,16 +31,27 @@ export function AddMovieForm() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedMovie, setSelectedMovie] = useState<MovieSuggestion | null>(null)
   const { user } = useUser()
+  // OMDb Autocomplete
+  const [omdbSuggestions, setOmdbSuggestions] = useState<OmdbSuggestion[]>([])
+  const [showOmdbSuggestions, setShowOmdbSuggestions] = useState(false)
+  const [director, setDirector] = useState('')
+  const [actor, setActor] = useState('')
+  const [year, setYear] = useState('')
+  const [genre, setGenre] = useState('')
+  const [posterUrl, setPosterUrl] = useState('')
 
-  // Autocomplete für Filme
+  // Autocomplete für Filme (Supabase + OMDb)
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (title.trim().length < 2) {
         setSuggestions([])
         setShowSuggestions(false)
+        setOmdbSuggestions([])
+        setShowOmdbSuggestions(false)
         return
       }
 
+      // Supabase interne Suche
       try {
         const { data: movies, error } = await supabase
           .from('movies')
@@ -39,15 +59,7 @@ export function AddMovieForm() {
           .ilike('title', `%${title.trim()}%`)
           .limit(5)
 
-        if (error) {
-          console.error('Supabase error:', error)
-          setSuggestions([])
-          setShowSuggestions(false)
-          return
-        }
-
-        if (movies && movies.length > 0) {
-          console.log('Found movies:', movies)
+        if (!error && movies && movies.length > 0) {
           setSuggestions(movies.map(movie => ({
             id: movie.id as string,
             title: movie.title as string,
@@ -56,26 +68,53 @@ export function AddMovieForm() {
           })))
           setShowSuggestions(true)
         } else {
-          console.log('No movies found for:', title)
           setSuggestions([])
           setShowSuggestions(false)
         }
       } catch (error) {
-        console.error('Error fetching suggestions:', error)
         setSuggestions([])
         setShowSuggestions(false)
       }
-    }
 
+      // OMDb Suche (nur für Filme)
+      if (contentType === 'film') {
+        try {
+          const results = await searchOMDb(title.trim())
+          setOmdbSuggestions(results)
+          setShowOmdbSuggestions(results.length > 0)
+        } catch (error) {
+          setOmdbSuggestions([])
+          setShowOmdbSuggestions(false)
+        }
+      } else {
+        setOmdbSuggestions([])
+        setShowOmdbSuggestions(false)
+      }
+    }
     const timer = setTimeout(fetchSuggestions, 300)
     return () => clearTimeout(timer)
-  }, [title])
+  }, [title, contentType])
 
   const handleSuggestionClick = (suggestion: MovieSuggestion) => {
     setSelectedMovie(suggestion)
     setTitle(suggestion.title)
     setContentType(suggestion.content_type)
     setShowSuggestions(false)
+  }
+
+  // OMDb Auswahl
+  const handleOmdbSuggestionClick = async (omdb: OmdbSuggestion) => {
+    setTitle(omdb.Title)
+    setYear(omdb.Year)
+    setShowOmdbSuggestions(false)
+    // Details holen
+    const details = await getOMDbDetails(omdb.imdbID)
+    setDirector(details.Director || '')
+    setActor(details.Actors || '')
+    setDescription(details.Plot || '')
+    setGenre(details.Genre || '')
+    setContentType('film')
+    setPosterUrl(omdb.Poster && omdb.Poster !== 'N/A' ? omdb.Poster : '')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,7 +127,25 @@ export function AddMovieForm() {
       if (selectedMovie) {
         // Use existing movie
         movieId = selectedMovie.id
-        console.log('Eintrag existiert bereits, füge Tags/Bewertung hinzu')
+        // Update movie fields with new values (except tags/ratings)
+        const { error: updateError } = await supabase
+          .from('movies')
+          .update({
+            description: description.trim() || null,
+            content_type: contentType,
+            created_by: user?.name || 'Unbekannt',
+            poster_url: posterUrl || null,
+            director: director || null,
+            actor: actor || null,
+            year: year ? Number(year) : null,
+            genre: genre || null,
+          })
+          .eq('id', movieId)
+        if (updateError) {
+          console.error('Movie update error:', updateError)
+          throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`)
+        }
+        console.log('Eintrag existiert bereits, Felder wurden aktualisiert, füge Tags/Bewertung hinzu')
       } else {
         // Check if movie already exists (case-insensitive)
         const { data: existingMovies } = await supabase
@@ -98,7 +155,25 @@ export function AddMovieForm() {
 
         if (existingMovies && existingMovies.length > 0) {
           movieId = existingMovies[0].id as string
-          console.log('Eintrag existiert bereits, füge Tags/Bewertung hinzu')
+          // Update movie fields with new values (except tags/ratings)
+          const { error: updateError } = await supabase
+            .from('movies')
+            .update({
+              description: description.trim() || null,
+              content_type: contentType,
+              created_by: user?.name || 'Unbekannt',
+              poster_url: posterUrl || null,
+              director: director || null,
+              actor: actor || null,
+              year: year ? Number(year) : null,
+              genre: genre || null,
+            })
+            .eq('id', movieId)
+          if (updateError) {
+            console.error('Movie update error:', updateError)
+            throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`)
+          }
+          console.log('Eintrag existiert bereits, Felder wurden aktualisiert, füge Tags/Bewertung hinzu')
         } else {
           // Create new movie
           const { data: newMovie, error: movieError } = await supabase
@@ -109,6 +184,11 @@ export function AddMovieForm() {
                 description: description.trim() || null,
                 content_type: contentType,
                 created_by: user?.name || 'Unbekannt',
+                poster_url: posterUrl || null,
+                director: director || null,
+                actor: actor || null,
+                year: year ? Number(year) : null,
+                genre: genre || null,
               },
             ])
             .select()
@@ -244,7 +324,7 @@ export function AddMovieForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Title with Autocomplete */}
+      {/* Title with OMDb Autocomplete only */}
       <div className="relative">
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
           Titel *
@@ -258,32 +338,30 @@ export function AddMovieForm() {
             setSelectedMovie(null)
           }}
           onBlur={() => {
-            // Hide suggestions after a short delay
-            setTimeout(() => setShowSuggestions(false), 200)
+            setTimeout(() => { setShowOmdbSuggestions(false); }, 200)
           }}
           onFocus={() => {
-            if (suggestions.length > 0) setShowSuggestions(true)
+            if (omdbSuggestions.length > 0) setShowOmdbSuggestions(true)
           }}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="z.B. Mulholland Drive"
           required
         />
-        
-        {/* Autocomplete Dropdown */}
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-            {suggestions.map((suggestion) => (
+        {/* OMDb Autocomplete Dropdown */}
+        {showOmdbSuggestions && omdbSuggestions.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-lg max-h-60 overflow-y-auto left-0">
+            {omdbSuggestions.map((omdb) => (
               <div
-                key={suggestion.id}
-                onClick={() => handleSuggestionClick(suggestion)}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                key={omdb.imdbID}
+                onClick={() => handleOmdbSuggestionClick(omdb)}
+                className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
               >
-                <div className="font-medium text-gray-900">{suggestion.title}</div>
-                <div className="text-sm text-gray-500">
-                  <span className="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs font-semibold text-gray-700 mr-2">
-                    {suggestion.content_type}
-                  </span>
-                  {suggestion.creator_name && `von ${suggestion.creator_name}`}
+                {omdb.Poster && omdb.Poster !== 'N/A' && (
+                  <img src={omdb.Poster} alt={omdb.Title} className="w-8 h-12 object-cover rounded mr-2" />
+                )}
+                <div>
+                  <div className="font-medium text-gray-900">{omdb.Title} <span className="text-xs text-gray-500">({omdb.Year})</span></div>
+                  <div className="text-xs text-gray-500">OMDb Film</div>
                 </div>
               </div>
             ))}
@@ -304,6 +382,63 @@ export function AddMovieForm() {
           placeholder="Kurze Beschreibung des Films..."
         />
       </div>
+
+      {/* Director (only for films) */}
+      {contentType === 'film' && (
+      <div>
+        <label htmlFor="director" className="block text-sm font-medium text-gray-700">Director</label>
+        <input
+          type="text"
+          id="director"
+          value={director}
+          onChange={e => setDirector(e.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="e.g. David Lynch"
+        />
+      </div>
+      )}
+      {/* Actor (only for films) */}
+      {contentType === 'film' && (
+      <div>
+        <label htmlFor="actor" className="block text-sm font-medium text-gray-700">Actor</label>
+        <input
+          type="text"
+          id="actor"
+          value={actor}
+          onChange={e => setActor(e.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="e.g. Naomi Watts, Laura Harring"
+        />
+      </div>
+      )}
+      {/* Year (only for films) */}
+      {contentType === 'film' && (
+      <div>
+        <label htmlFor="year" className="block text-sm font-medium text-gray-700">Year</label>
+        <input
+          type="text"
+          id="year"
+          value={year}
+          onChange={e => setYear(e.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="e.g. 2001"
+        />
+      </div>
+      )}
+      {/* Genre (only for films) */}
+      {contentType === 'film' && (
+      <div>
+        <label htmlFor="genre" className="block text-sm font-medium text-gray-700">Genre</label>
+        <input
+          type="text"
+          id="genre"
+          value={genre}
+          onChange={e => setGenre(e.target.value)}
+          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="e.g. Drama, Thriller"
+        />
+      </div>
+      )}
 
       {/* Content Type */}
       <div>

@@ -13,6 +13,8 @@ export interface Movie {
   created_at: string
   created_by?: string
   creator_name?: string
+  actor?: string
+  director?: string
 }
 
 export interface Rating {
