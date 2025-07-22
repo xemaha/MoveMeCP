@@ -32,7 +32,6 @@ yarn-error.log*
 
 
 # env files (kann einzeln ins Git, nur .env.local bleibt privat)
-.env.local
 # vercel
 .vercel
 
