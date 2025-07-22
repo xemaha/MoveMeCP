@@ -383,8 +383,8 @@ export default function AddMovieForm() {
         {showOmdbSuggestions && omdbSuggestions.length > 0 && (
           <div
             ref={omdbDropdownRef}
-            className="fixed sm:absolute z-50 sm:z-10 mt-1 w-full max-w-md left-1/2 sm:left-0 -translate-x-1/2 sm:translate-x-0 bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto"
-            style={{ top: '70px' }}
+            className="absolute z-50 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto left-0"
+            style={{ top: '100%' }}
           >
             {/* Mobile Close Button */}
             <div className="block sm:hidden sticky top-0 bg-white z-10 text-right p-2 border-b border-gray-200">
