@@ -43,14 +43,16 @@ export default function AddMovieForm() {
   // Autocomplete für Filme (Supabase + OMDb)
   // Click outside ref for OMDb dropdown
   const omdbDropdownRef = useRef<HTMLDivElement>(null);
+  // Fetch OMDb suggestions and Supabase suggestions on title change
   useEffect(() => {
+    let ignore = false;
     const fetchSuggestions = async () => {
       if (title.trim().length < 2) {
-        setSuggestions([])
-        setShowSuggestions(false)
-        setOmdbSuggestions([])
-        setShowOmdbSuggestions(false)
-        return
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setOmdbSuggestions([]);
+        setShowOmdbSuggestions(false);
+        return;
       }
       // Supabase interne Suche
       try {
@@ -58,56 +60,64 @@ export default function AddMovieForm() {
           .from('movies')
           .select('id, title, content_type, created_by')
           .ilike('title', `%${title.trim()}%`)
-          .limit(5)
-        if (!error && movies && movies.length > 0) {
-          setSuggestions(movies.map(movie => ({
-            id: movie.id as string,
-            title: movie.title as string,
-            content_type: movie.content_type as string,
-            creator_name: movie.created_by as string || 'Unbekannt'
-          })))
-          setShowSuggestions(true)
-        } else {
-          setSuggestions([])
-          setShowSuggestions(false)
+          .limit(5);
+        if (!ignore) {
+          if (!error && movies && movies.length > 0) {
+            setSuggestions(movies.map(movie => ({
+              id: movie.id as string,
+              title: movie.title as string,
+              content_type: movie.content_type as string,
+              creator_name: movie.created_by as string || 'Unbekannt'
+            })));
+            setShowSuggestions(true);
+          } else {
+            setSuggestions([]);
+            setShowSuggestions(false);
+          }
         }
       } catch (error) {
-        setSuggestions([])
-        setShowSuggestions(false)
+        // Fehlerbehandlung
       }
-      // OMDb Suche (nur für Filme)
-      if (contentType === 'film') {
-        try {
-          const results = await searchOMDb(title.trim())
-          setOmdbSuggestions(results)
-          setShowOmdbSuggestions(results.length > 0)
-        } catch (error) {
-          setOmdbSuggestions([])
-          setShowOmdbSuggestions(false)
+      // OMDb Autocomplete
+      try {
+        const omdb = await searchOMDb(title.trim());
+        if (!ignore) {
+          if (omdb && omdb.length > 0) {
+            setOmdbSuggestions(omdb);
+            setShowOmdbSuggestions(true);
+          } else {
+            setOmdbSuggestions([]);
+            setShowOmdbSuggestions(false);
+          }
         }
-      } else {
-        setOmdbSuggestions([])
-        setShowOmdbSuggestions(false)
+      } catch (error) {
+        if (!ignore) {
+          setOmdbSuggestions([]);
+          setShowOmdbSuggestions(false);
+        }
       }
-    }
-    const timer = setTimeout(fetchSuggestions, 300)
-    return () => clearTimeout(timer)
-  }, [title, contentType])
+    };
+    fetchSuggestions();
+    return () => { ignore = true; };
+  }, [title, contentType]);
 
-  // Click outside handler for OMDb dropdown
+  // Click outside handler for OMDb dropdown (schließt nur, wenn explizit außerhalb getippt wird, nicht bei Input-Blur)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
-      if (omdbDropdownRef.current && !omdbDropdownRef.current.contains(event.target as Node)) {
+      if (!showOmdbSuggestions) return;
+      // Prüfe, ob das Dropdown oder das Input-Feld selbst geklickt wurde
+      const input = document.getElementById('title');
+      if (
+        omdbDropdownRef.current &&
+        !omdbDropdownRef.current.contains(event.target as Node) &&
+        input &&
+        !input.contains(event.target as Node)
+      ) {
         setShowOmdbSuggestions(false);
       }
     }
-    if (showOmdbSuggestions) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-    } else {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
@@ -363,9 +373,24 @@ export default function AddMovieForm() {
           placeholder="z.B. Mulholland Drive"
           required
         />
-        {/* OMDb Autocomplete Dropdown */}
+        {/* OMDb Autocomplete Dropdown - fixed on mobile, absolute on desktop */}
         {showOmdbSuggestions && omdbSuggestions.length > 0 && (
-          <div ref={omdbDropdownRef} className="absolute z-10 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-lg max-h-60 overflow-y-auto left-0">
+          <div
+            ref={omdbDropdownRef}
+            className="fixed sm:absolute z-50 sm:z-10 mt-1 w-full max-w-md left-1/2 sm:left-0 -translate-x-1/2 sm:translate-x-0 bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto"
+            style={{ top: '70px' }}
+          >
+            {/* Mobile Close Button */}
+            <div className="block sm:hidden sticky top-0 bg-white z-10 text-right p-2 border-b border-gray-200">
+              <button
+                type="button"
+                className="text-gray-500 text-lg px-2 py-1"
+                onClick={() => setShowOmdbSuggestions(false)}
+                aria-label="Schließen"
+              >
+                ✕
+              </button>
+            </div>
             {omdbSuggestions.map((omdb) => (
               <div
                 key={omdb.imdbID}
