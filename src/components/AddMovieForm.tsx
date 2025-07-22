@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
-import { searchOMDb, getOMDbDetails } from '@/lib/omdbApi'
+
 
 interface MovieSuggestion {
   id: string
@@ -78,12 +78,13 @@ export default function AddMovieForm() {
       } catch (error) {
         // Fehlerbehandlung
       }
-      // OMDb Autocomplete
+      // OMDb Autocomplete via API route
       try {
-        const omdb = await searchOMDb(title.trim());
+        const res = await fetch(`/api/omdb?title=${encodeURIComponent(title.trim())}`);
+        const data = await res.json();
         if (!ignore) {
-          if (omdb && omdb.length > 0) {
-            setOmdbSuggestions(omdb);
+          if (data && data.Search && data.Search.length > 0) {
+            setOmdbSuggestions(data.Search);
             setShowOmdbSuggestions(true);
           } else {
             setOmdbSuggestions([]);
@@ -133,17 +134,22 @@ export default function AddMovieForm() {
 
   // OMDb Auswahl
   const handleOmdbSuggestionClick = async (omdb: OmdbSuggestion) => {
-    setTitle(omdb.Title)
-    setYear(omdb.Year)
-    setShowOmdbSuggestions(false)
-    // Details holen
-    const details = await getOMDbDetails(omdb.imdbID)
-    setDirector(details.Director || '')
-    setActor(details.Actors || '')
-    setDescription(details.Plot || '')
-    setGenre(details.Genre || '')
-    setContentType('film')
-    setPosterUrl(omdb.Poster && omdb.Poster !== 'N/A' ? omdb.Poster : '')
+    setTitle(omdb.Title);
+    setYear(omdb.Year);
+    setShowOmdbSuggestions(false);
+    // Details holen via API route
+    try {
+      const res = await fetch(`/api/omdb?imdbID=${encodeURIComponent(omdb.imdbID)}`);
+      const details = await res.json();
+      setDirector(details.Director || '');
+      setActor(details.Actors || '');
+      setDescription(details.Plot || '');
+      setGenre(details.Genre || '');
+      setContentType('film');
+      setPosterUrl(omdb.Poster && omdb.Poster !== 'N/A' ? omdb.Poster : '');
+    } catch (error) {
+      // Fehlerbehandlung
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
