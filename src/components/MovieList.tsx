@@ -69,43 +69,9 @@ interface ContentTypeFilter {
   serie: boolean
 }
 
+type FilterType = 'all' | 'rated' | 'watchlist';
+
 export function MovieList() {
-  async function handleDeleteRating(movieId: string) {
-    if (!user) return;
-    try {
-      // Find the rating id
-      const { data, error } = await supabase
-        .from('ratings')
-        .select('id')
-        .eq('movie_id', movieId)
-        .eq('user_id', user.id)
-        .single();
-      if (error || !data) return;
-      await supabase
-        .from('ratings')
-        .delete()
-        .eq('id', data.id);
-      // Update local state
-      setMovies(prevMovies => prevMovies.map(movie => {
-        if (movie.id === movieId) {
-          const updatedRatings = movie.ratings.filter(r => r.user_id !== user.id);
-          const averageRating = updatedRatings.length > 0
-            ? updatedRatings.reduce((sum, r) => sum + r.rating, 0) / updatedRatings.length
-            : 0;
-          return {
-            ...movie,
-            ratings: updatedRatings,
-            averageRating,
-            ratingCount: updatedRatings.length
-          };
-        }
-        return movie;
-      }));
-    } catch (err) {
-      console.error('Fehler beim Löschen der Bewertung', err);
-    }
-  }
-  // Tag-Filter: AND/OR Umschalter
   const [requireAllTags, setRequireAllTags] = useState(true)
   const [movies, setMovies] = useState<MovieWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -113,7 +79,7 @@ export function MovieList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [userFilter, setUserFilter] = useState<UserRatingFilter>({
     userName: '',
-    minRating: 1,
+    minRating: 0,
     maxRating: 5
   })
   const [showUnrated, setShowUnrated] = useState(false)
@@ -132,12 +98,18 @@ export function MovieList() {
   // State for tag display toggle
   const [showAllTags, setShowAllTags] = useState(false)
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [watchlistMovies, setWatchlistMovies] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchMoviesWithDetails()
     fetchAvailableUsers()
     fetchAllTags()
   }, [])
+
+  useEffect(() => {
+    loadMovies();
+  }, [filter]);
 
   // Fetch tag usage counts from movie_tags table (like in MovieDetailModal)
   useEffect(() => {
@@ -356,6 +328,108 @@ export function MovieList() {
     }
   }
 
+  // Add useEffect to fetch watchlist status
+  useEffect(() => {
+    const fetchWatchlistStatus = async () => {
+      if (!user) {
+        setWatchlistMovies(new Set())
+        return
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('watchlist')
+          .select('movie_id')
+          .eq('user_id', user.id)
+
+        if (!error && data) {
+          const watchlistIds = new Set(data.map(item => item.movie_id as string))
+          setWatchlistMovies(watchlistIds)
+        }
+      } catch (error) {
+        console.error('Error fetching watchlist:', error)
+      }
+    }
+
+    fetchWatchlistStatus()
+  }, [user])
+
+  const loadMovies = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Always fetch all movies with complete data, then filter client-side
+      const { data, error } = await supabase
+        .from('movies')
+        .select(`
+          *,
+          ratings!left(rating, user_name, user_id),
+          movie_tags!left(
+            tags(id, name, color, created_at)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform the data to match our MovieWithDetails interface
+      let moviesWithDetails = (data || []).map((movie: any) => {
+        const ratings = movie.ratings || [];
+        const tags = movie.movie_tags?.map((mt: any) => mt.tags).filter(Boolean) || [];
+        
+        const averageRating = ratings.length > 0
+          ? ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length
+          : 0;
+
+        return {
+          ...movie,
+          tags,
+          averageRating,
+          ratingCount: ratings.length,
+          ratings: ratings.map((r: any) => ({
+            rating: r.rating,
+            user_name: r.user_name,
+            user_id: r.user_id
+          }))
+        } as MovieWithDetails;
+      });
+
+      // Apply filter after loading all data
+      if (filter === 'rated' && user) {
+        // Only show movies that the current user has rated
+        moviesWithDetails = moviesWithDetails.filter(movie => 
+          movie.ratings.some(rating => rating.user_id === user.id)
+        );
+      } else if (filter === 'watchlist' && user) {
+        // Only show movies that are in the current user's watchlist
+        moviesWithDetails = moviesWithDetails.filter(movie => 
+          watchlistMovies.has(movie.id)
+        );
+      }
+      // For 'all' filter, show everything (no additional filtering)
+
+      setMovies(moviesWithDetails);
+
+      // Always update watchlist status after loading movies
+      if (user) {
+        const { data: watchlistData } = await supabase
+          .from('watchlist')
+          .select('movie_id')
+          .eq('user_id', user.id)
+
+        if (watchlistData) {
+          const watchlistIds = new Set(watchlistData.map(item => item.movie_id as string))
+          setWatchlistMovies(watchlistIds)
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading movies:', error);
+      setError('Fehler beim Laden der Filme: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Filter movies based on search and user rating filter
   const filteredMovies = movies.filter(movie => {
     // Text search (now also includes actors and director)
@@ -520,9 +594,24 @@ export function MovieList() {
           alert('Fehler beim Erstellen der Bewertung')
           return
         }
+
+        // Auto-remove from watchlist when rating a movie
+        if (watchlistMovies.has(movieId)) {
+          await supabase
+            .from('watchlist')
+            .delete()
+            .eq('movie_id', movieId)
+            .eq('user_id', user.id)
+
+          setWatchlistMovies(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(movieId)
+            return newSet
+          })
+        }
       }
 
-      // Update the local state optimistically (without full reload)
+      // Update the local state optimistically
       setMovies(prevMovies => prevMovies.map(movie => {
         if (movie.id === movieId) {
           // Update or add the rating
@@ -552,7 +641,6 @@ export function MovieList() {
         return movie
       }))
 
-      // Show success feedback
       console.log('Bewertung erfolgreich gespeichert!')
       
     } catch (error) {
@@ -568,6 +656,219 @@ export function MovieList() {
 
   const handleRemoveMovie = (movieId: string) => {
     setMovies(movies.filter(movie => movie.id !== movieId))
+  }
+
+  async function handleDeleteRating(movieId: string) {
+    if (!user) return;
+    try {
+      // Find the rating id
+      const { data, error } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('movie_id', movieId)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error || !data) {
+        console.error('Rating not found:', error);
+        return;
+      }
+      
+      // Delete the rating using the correct ID
+      const { error: deleteError } = await supabase
+        .from('ratings')
+        .delete()
+        .eq('id', data.id as string);
+      
+      if (deleteError) {
+        console.error('Error deleting rating:', deleteError);
+        return;
+      }
+      
+      // Update local state
+      setMovies(prevMovies => prevMovies.map(movie => {
+        if (movie.id === movieId) {
+          const updatedRatings = movie.ratings.filter(r => r.user_id !== user.id);
+          const averageRating = updatedRatings.length > 0
+            ? updatedRatings.reduce((sum, r) => sum + r.rating, 0) / updatedRatings.length
+            : 0;
+          return {
+            ...movie,
+            ratings: updatedRatings,
+            averageRating,
+            ratingCount: updatedRatings.length
+          };
+        }
+        return movie;
+      }));
+    } catch (err) {
+      console.error('Fehler beim Löschen der Bewertung', err);
+    }
+  }
+
+  // Add watchlist functionality with auto-save movie
+  const handleWatchlistToggle = async (movieId: string) => {
+    if (!user) {
+      alert('Du musst eingeloggt sein, um Filme zur Watchlist hinzuzufügen!')
+      return
+    }
+
+    try {
+      // Check if movie exists in database, save if not
+      const { data: movieExists, error: movieCheckError } = await supabase
+        .from('movies')
+        .select('id')
+        .eq('id', movieId)
+        .single()
+
+      // If movie doesn't exist, save it first
+      if (movieCheckError || !movieExists) {
+        console.log('Movie not found in database, saving it first...')
+        
+        // Find the movie in our local state
+        const movieToSave = movies.find(m => m.id === movieId)
+        if (!movieToSave) {
+          alert('Fehler: Film nicht gefunden.')
+          return
+        }
+
+        // Save the movie to database
+        const { error: insertMovieError } = await supabase
+          .from('movies')
+          .insert([
+            {
+              id: movieToSave.id,
+              title: movieToSave.title,
+              description: movieToSave.description,
+              year: movieToSave.year,
+              poster_url: movieToSave.poster_url,
+              trailer_url: movieToSave.trailer_url,
+              content_type: movieToSave.content_type,
+              actor: movieToSave.actor,
+              director: movieToSave.director,
+              created_by: user.name,
+              created_at: new Date().toISOString()
+            }
+          ])
+
+        if (insertMovieError) {
+          console.error('Error saving movie:', insertMovieError)
+          alert('Fehler beim Speichern des Films: ' + insertMovieError.message)
+          return
+        }
+
+        // Save tags if any
+        if (movieToSave.tags && movieToSave.tags.length > 0) {
+          const tagInserts = movieToSave.tags.map(tag => ({
+            movie_id: movieToSave.id,
+            tag_id: tag.id
+          }))
+
+          const { error: tagError } = await supabase
+            .from('movie_tags')
+            .insert(tagInserts)
+
+          if (tagError) {
+            console.error('Error saving movie tags:', tagError)
+            // Don't fail completely if tags fail, just log the error
+          }
+        }
+
+        console.log('Movie saved successfully to database')
+      }
+
+      const isCurrentlyInWatchlist = watchlistMovies.has(movieId)
+      const userHasRated = movies.find(m => m.id === movieId)?.ratings.some(r => r.user_id === user.id)
+
+      if (isCurrentlyInWatchlist) {
+        // Remove from watchlist
+        const { error: deleteError } = await supabase
+          .from('watchlist')
+          .delete()
+          .eq('movie_id', movieId)
+          .eq('user_id', user.id)
+
+        if (deleteError) {
+          console.error('Error removing from watchlist:', deleteError)
+          alert('Fehler beim Entfernen aus der Watchlist: ' + deleteError.message)
+          return
+        }
+
+        setWatchlistMovies(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(movieId)
+          return newSet
+        })
+      } else {
+        // Before adding to watchlist, check if user has already rated this movie
+        if (userHasRated) {
+          alert('Du hast diesen Film bereits bewertet. Bewertete Filme können nicht zur Watchlist hinzugefügt werden.')
+          return
+        }
+
+        // Add to watchlist
+        const { error: insertError } = await supabase
+          .from('watchlist')
+          .insert([
+            {
+              movie_id: movieId,
+              user_id: user.id,
+            },
+          ])
+
+        if (insertError) {
+          console.error('Error adding to watchlist:', insertError)
+          alert('Fehler beim Hinzufügen zur Watchlist: ' + insertError.message)
+          return
+        }
+
+        setWatchlistMovies(prev => new Set(prev).add(movieId))
+      }
+
+      // Refresh watchlist status to ensure consistency
+      const { data: watchlistData } = await supabase
+        .from('watchlist')
+        .select('movie_id')
+        .eq('user_id', user.id)
+
+      if (watchlistData) {
+        const watchlistIds = new Set(watchlistData.map(item => item.movie_id as string))
+        setWatchlistMovies(watchlistIds)
+      }
+
+      // Reload movies if we're viewing the watchlist filter
+      if (filter === 'watchlist') {
+        await loadMovies()
+      }
+      
+    } catch (error) {
+      console.error('Error handling watchlist:', error)
+      alert('Fehler beim Verarbeiten der Watchlist: ' + (error as Error).message)
+    }
+  }
+
+  const isInWatchlist = (movieId: string): boolean => {
+    return watchlistMovies.has(movieId)
+  }
+
+  // Update onMovieUpdated callback to refresh watchlist status
+  const handleMovieUpdated = async () => {
+    await fetchMoviesWithDetails()
+    
+    // Always refresh watchlist status after movie update
+    if (user) {
+      const { data: watchlistData } = await supabase
+        .from('watchlist')
+        .select('movie_id')
+        .eq('user_id', user.id)
+
+      if (watchlistData) {
+        const watchlistIds = new Set(watchlistData.map(item => item.movie_id as string))
+        setWatchlistMovies(watchlistIds)
+      }
+    }
+    
+    setSelectedMovieForEdit(null)
   }
 
   if (isLoading) {
@@ -594,9 +895,8 @@ export function MovieList() {
   const allTagsSorted = [...allTags].sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <>
     <div className="space-y-6">
-      {/* View Mode Toggle and Refresh Button */}
+      {/* View Mode Toggle */}
       <div className="flex justify-center items-center gap-4">
         <div className="bg-gray-100 rounded-lg p-1 flex">
           <button
@@ -620,7 +920,6 @@ export function MovieList() {
             🏷️ Nach Tags
           </button>
         </div>
-        {/* Refresh-Button entfernt, da kein expliziter Speichern-Button gewünscht */}
       </div>
 
       {/* Search and Filter Controls */}
@@ -634,6 +933,104 @@ export function MovieList() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        {/* Main Filter Dropdown */}
+        <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-800">🎬 Film Filter</h3>
+          </div>
+          <div className="flex justify-center">
+            <div className="w-full max-w-md">
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-center">Anzeigen:</label>
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as FilterType)}
+                className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+              >
+                <option value="all">🍿 Alle Filme</option>
+                <option value="rated">⭐ Meine Bewertungen</option>
+                <option value="watchlist">📝 Meine Watchlist</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* User Rating Filter - Separate Section */}
+        <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-800">👤 Benutzer Filter</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* User Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Benutzer auswählen:</label>
+              <select
+                value={userFilter.userName}
+                onChange={(e) => setUserFilter({...userFilter, userName: e.target.value})}
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white text-lg"
+              >
+                <option value="">👥 Alle Benutzer</option>
+                {availableUsers.map(user => (
+                  <option key={user} value={user}>👤 {user}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Rating Range for Selected User */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Bewertungsbereich {userFilter.userName ? `für ${userFilter.userName}` : '(alle Benutzer)'}:
+              </label>
+              <div className="flex flex-col gap-2">
+                <Range
+                  step={1}
+                  min={0}
+                  max={5}
+                  values={[userFilter.minRating ?? 0, userFilter.maxRating ?? 5]}
+                  onChange={(values: number[]) => setUserFilter({ ...userFilter, minRating: values[0], maxRating: values[1] })}
+                  renderTrack={({ props, children }: RangeTrackProps) => {
+                    const { key, ...rest } = props;
+                    return (
+                      <div key={key} {...rest} className="h-3 w-full rounded bg-gray-200 my-2" style={{ ...props.style }}>
+                        <div className="h-3 rounded bg-orange-400" style={{
+                          position: 'absolute',
+                          left: `${((userFilter.minRating ?? 0) / 5) * 100}%`,
+                          width: `${(((userFilter.maxRating ?? 5) - (userFilter.minRating ?? 0)) / 5) * 100}%`,
+                          top: 0,
+                          bottom: 0
+                        }} />
+                        {children}
+                      </div>
+                    );
+                  }}
+                  renderThumb={({ props, index }: RangeThumbProps) => {
+                    const { key, ...rest } = props;
+                    return (
+                      <div
+                        key={key}
+                        {...rest}
+                        className="w-7 h-7 bg-orange-500 border-2 border-orange-700 rounded-full flex items-center justify-center shadow-lg"
+                        style={{ ...props.style }}
+                      >
+                        <span className="text-xs font-bold text-white select-none">
+                          {[userFilter.minRating ?? 0, userFilter.maxRating ?? 5][index]}
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
+                <div className="flex justify-between text-sm text-gray-600 font-medium">
+                  <span>0 ★</span>
+                  <span>1 ★</span>
+                  <span>2 ★★</span>
+                  <span>3 ★★★</span>
+                  <span>4 ★★★★</span>
+                  <span>5 ★★★★★</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Content Type Filter */}
@@ -675,73 +1072,6 @@ export function MovieList() {
                 📚 Bücher
               </span>
             </label>
-          </div>
-        </div>
-
-        {/* User Rating Filter */}
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Filter nach User-Bewertungen</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">User</label>
-              <select
-                value={userFilter.userName}
-                onChange={(e) => setUserFilter({...userFilter, userName: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Alle User</option>
-                {availableUsers.map(user => (
-                  <option key={user} value={user}>{user}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          </div>
-          {/* Rating slider directly under user dropdown, no label or extra text */}
-          <div className="flex flex-col gap-2 w-full mt-4">
-            <Range
-              step={1}
-              min={0}
-              max={5}
-              values={[userFilter.minRating ?? 0, userFilter.maxRating ?? 5]}
-              onChange={(values: number[]) => setUserFilter({ ...userFilter, minRating: values[0], maxRating: values[1] })}
-              renderTrack={({ props, children }: RangeTrackProps) => {
-                const { key, ...rest } = props;
-                return (
-                  <div key={key} {...rest} className="h-2 w-full rounded bg-gray-200 my-4" style={{ ...props.style }}>
-                    <div className="h-2 rounded bg-yellow-400" style={{
-                      position: 'absolute',
-                      left: `${((userFilter.minRating ?? 0) / 5) * 100}%`,
-                      width: `${(((userFilter.maxRating ?? 5) - (userFilter.minRating ?? 0)) / 5) * 100}%`,
-                      top: 0,
-                      bottom: 0
-                    }} />
-                    {children}
-                  </div>
-                );
-              }}
-              renderThumb={({ props, index }: RangeThumbProps) => {
-                const { key, ...rest } = props;
-                return (
-                  <div
-                    key={key}
-                    {...rest}
-                    className="w-5 h-5 bg-yellow-400 border-2 border-yellow-600 rounded-full flex items-center justify-center shadow"
-                    style={{ ...props.style }}
-                  >
-                    <span className="text-xs font-bold text-white select-none">{[userFilter.minRating ?? 0, userFilter.maxRating ?? 5][index]}</span>
-                  </div>
-                );
-              }}
-            />
-            <div className="flex justify-between text-xs text-gray-500 w-full px-1">
-              <span>0</span>
-              <span>1</span>
-              <span>2</span>
-              <span>3</span>
-              <span>4</span>
-              <span>5</span>
-            </div>
           </div>
         </div>
 
@@ -801,7 +1131,6 @@ export function MovieList() {
         </div>
       </div>
 
-      
       <div className="text-sm text-gray-600">
         {filteredMovies.length} {filteredMovies.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
       </div>
@@ -939,7 +1268,41 @@ export function MovieList() {
                           </button>
                         )}
                       </div>
+                    </div>
+                  )}
 
+                  {/* Watchlist Button */}
+                  {user && (
+                    <div className="mb-2 p-2 sm:p-3 bg-green-50 rounded-lg" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">
+                          Watchlist:
+                        </span>
+                        {getUserRating(movie.ratings, user.id) > 0 ? (
+                          <span className="text-xs text-gray-500 italic">
+                            Bereits bewertet
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleWatchlistToggle(movie.id)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
+                              isInWatchlist(movie.id)
+                                ? 'bg-green-600 text-white hover:bg-green-700 shadow-md'
+                                : 'bg-white text-green-600 border-2 border-green-600 hover:bg-green-50'
+                            }`}
+                            title={isInWatchlist(movie.id) ? 'Aus Watchlist entfernen' : 'Zur Watchlist hinzufügen'}
+                          >
+                            <span className={`text-lg transition-transform duration-200 ${
+                              isInWatchlist(movie.id) ? 'rotate-45' : 'hover:scale-110'
+                            }`}>
+                              +
+                            </span>
+                            <span>
+                              {isInWatchlist(movie.id) ? 'In Watchlist' : 'Zur Watchlist'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1042,12 +1405,9 @@ export function MovieList() {
           movie={selectedMovieForEdit}
           isOpen={true}
           onClose={() => setSelectedMovieForEdit(null)}
-          onMovieUpdated={() => {
-            fetchMoviesWithDetails()
-            setSelectedMovieForEdit(null)
-          }}
+          onMovieUpdated={handleMovieUpdated}
         />
       )}
-    </>
+    </div>
   )
 }
