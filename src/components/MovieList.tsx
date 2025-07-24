@@ -24,7 +24,7 @@ interface EnhancedMovie extends Movie {
 
 interface FilterSettings {
   searchQuery: string
-  userType: 'all' | 'rated' | 'watchlist'
+  userType: 'all' | 'rated' | 'watchlist' | 'unrated'
   userName: string
   minRating: number
   maxRating: number
@@ -106,6 +106,8 @@ export function MovieList() {
   const [selectedMovie, setSelectedMovie] = useState<EnhancedMovie | null>(null)
   const [showAllTagsInFilter, setShowAllTagsInFilter] = useState(false)
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
+  const [userSearchInput, setUserSearchInput] = useState('')
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
 
   // Initialize data
   useEffect(() => {
@@ -231,11 +233,10 @@ export function MovieList() {
       
       if (ratingsResult.data) {
         ratingsResult.data.forEach((r: any) => {
-          // Nur echte Namen hinzufügen, keine UUIDs
           if (r.user_name && 
               typeof r.user_name === 'string' && 
               r.user_name.trim() !== '' &&
-              !r.user_name.match(/^[0-9a-f-]{36}$/i)) { // UUID Pattern ausschließen
+              !r.user_name.match(/^[0-9a-f-]{36}$/i)) {
             userSet.add(r.user_name)
           }
         })
@@ -246,15 +247,25 @@ export function MovieList() {
           if (m.created_by && 
               typeof m.created_by === 'string' && 
               m.created_by.trim() !== '' &&
-              !m.created_by.match(/^[0-9a-f-]{36}$/i)) { // UUID Pattern ausschließen
+              !m.created_by.match(/^[0-9a-f-]{36}$/i)) {
             userSet.add(m.created_by)
           }
         })
       }
 
-      const userList = Array.from(userSet)
+      let userList = Array.from(userSet)
         .filter(u => u && u !== 'System')
-        .sort()
+
+      // Sort: current user first, then alphabetically
+      const currentUserName = user?.name
+      if (currentUserName && userList.includes(currentUserName)) {
+        userList = [
+          currentUserName,
+          ...userList.filter(u => u !== currentUserName).sort()
+        ]
+      } else {
+        userList.sort()
+      }
 
       setAvailableUsers(userList)
     } catch (error) {
@@ -478,6 +489,9 @@ export function MovieList() {
         matchesUserTypeFilter = !!userRating
       } else if (filters.userType === 'watchlist') {
         matchesUserTypeFilter = watchlistMovies.has(movie.id)
+      } else if (filters.userType === 'unrated') {
+        const userRating = movie.ratings?.find(r => r.user_id === user.id)
+        matchesUserTypeFilter = !userRating
       }
     }
 
@@ -665,6 +679,7 @@ export function MovieList() {
               >
                 <option value="all">🎬 Alle</option>
                 <option value="rated">⭐ Nur von mir bewertete</option>
+                <option value="unrated">❓ Nur von mir nicht bewertete</option>
                 <option value="watchlist">👁️ Nur meine Watchlist</option>
               </select>
             </div>
@@ -1036,4 +1051,3 @@ export function MovieList() {
     </div>
   )
 }
-
