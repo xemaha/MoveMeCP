@@ -678,9 +678,9 @@ export function MovieList() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="all">🎬 Alle</option>
-                <option value="rated">⭐ Nur von mir bewertete</option>
-                <option value="unrated">❓ Nur von mir nicht bewertete</option>
-                <option value="watchlist">👁️ Nur meine Watchlist</option>
+                <option value="rated">⭐ Von mir bewertete</option>
+                <option value="unrated">☆ Von mir nicht bewertete</option>
+                <option value="watchlist">👁️ Meine Watchlist</option>
               </select>
             </div>
           )}
