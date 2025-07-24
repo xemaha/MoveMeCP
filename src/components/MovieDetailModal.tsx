@@ -199,6 +199,191 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
     }
   };
 
+  const [isInWatchlist, setIsInWatchlist] = useState<boolean>(false);
+  const [userRating, setUserRating] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchWatchlistStatus = async () => {
+      if (!user || !movie) {
+        setIsInWatchlist(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('watchlist')
+          .select('id')
+          .eq('movie_id', movie.id)
+          .eq('user_id', user.id)
+          .single();
+
+        setIsInWatchlist(!error && !!data);
+      } catch (error) {
+        console.error('Error fetching watchlist status:', error);
+        setIsInWatchlist(false);
+      }
+    };
+
+    fetchWatchlistStatus();
+  }, [user, movie]);
+
+  useEffect(() => {
+    const fetchUserRating = async () => {
+      if (!user || !movie) {
+        setUserRating(0);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('ratings')
+          .select('rating')
+          .eq('movie_id', movie.id)
+          .eq('user_id', user.id)
+          .single();
+
+        setUserRating(!error && data ? (data.rating as number) : 0);
+      } catch (error) {
+        console.error('Error fetching user rating:', error);
+        setUserRating(0);
+      }
+    };
+
+    fetchUserRating();
+  }, [user, movie]);
+
+  const handleStarClick = async (rating: number) => {
+    if (!user || !movie) {
+      alert('Du musst eingeloggt sein, um zu bewerten!');
+      return;
+    }
+
+    try {
+      // Check if user already rated this movie
+      const { data: existingRating, error: fetchError } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('movie_id', movie.id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingRating) {
+        // Update existing rating
+        const { error } = await supabase
+          .from('ratings')
+          .update({ rating })
+          .eq('id', existingRating.id as string);
+
+        if (error) {
+          console.error('Error updating rating:', error);
+          alert('Fehler beim Aktualisieren der Bewertung');
+          return;
+        }
+      } else {
+        // Create new rating
+        const { error } = await supabase
+          .from('ratings')
+          .insert([
+            {
+              movie_id: movie.id,
+              rating: rating,
+              user_id: user.id,
+              user_name: user.name,
+            },
+          ]);
+
+        if (error) {
+          console.error('Error creating rating:', error);
+          alert('Fehler beim Erstellen der Bewertung');
+          return;
+        }
+      }
+
+      setUserRating(rating);
+      console.log('Bewertung erfolgreich gespeichert!');
+      
+    } catch (error) {
+      console.error('Error handling rating:', error);
+      alert('Fehler beim Verarbeiten der Bewertung');
+    }
+  };
+
+  const handleDeleteRating = async () => {
+    if (!user || !movie) return;
+    
+    try {
+      const { error } = await supabase
+        .from('ratings')
+        .delete()
+        .eq('movie_id', movie.id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting rating:', error);
+        alert('Fehler beim Löschen der Bewertung');
+        return;
+      }
+
+      setUserRating(0);
+      console.log('Bewertung erfolgreich gelöscht!');
+      
+    } catch (error) {
+      console.error('Error deleting rating:', error);
+      alert('Fehler beim Löschen der Bewertung');
+    }
+  };
+
+  const handleWatchlistToggle = async () => {
+    if (!user || !movie) {
+      alert('Du musst eingeloggt sein, um Filme zur Watchlist hinzuzufügen!')
+      return
+    }
+
+    try {
+      if (isInWatchlist) {
+        // Remove from watchlist
+        const { error } = await supabase
+          .from('watchlist')
+          .delete()
+          .eq('movie_id', movie.id)
+          .eq('user_id', user.id)
+
+        if (error) {
+          console.error('Error removing from watchlist:', error)
+          alert('Fehler beim Entfernen aus der Watchlist')
+          return
+        }
+
+        setIsInWatchlist(false)
+      } else {
+        // Add to watchlist
+        const { error } = await supabase
+          .from('watchlist')
+          .insert([
+            {
+              movie_id: movie.id,
+              user_id: user.id,
+              user_name: user.name,
+            },
+          ])
+
+        if (error) {
+          console.error('Error adding to watchlist:', error)
+          alert('Fehler beim Hinzufügen zur Watchlist')
+          return
+        }
+
+        setIsInWatchlist(true)
+      }
+
+      console.log('Watchlist erfolgreich aktualisiert!')
+      
+    } catch (error) {
+      console.error('Error handling watchlist:', error)
+      alert('Fehler beim Verarbeiten der Watchlist')
+    }
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -398,6 +583,61 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
               </button>
             </div>
           </div>
+
+          {/* Personal Rating Section */}
+          {user && (
+            <div className="bg-blue-50 p-4 rounded-lg mt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">
+                Deine Bewertung ({user.name}):
+              </h4>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => handleStarClick(star)}
+                      className={`w-8 h-8 text-2xl transition-colors hover:scale-110 ${
+                        star <= userRating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
+                      }`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  <span className="ml-3 text-sm text-gray-600">
+                    {userRating > 0 ? `${userRating} Sterne` : 'Noch nicht bewertet'}
+                  </span>
+                  {/* Delete rating button */}
+                  {userRating > 0 && (
+                    <button
+                      onClick={handleDeleteRating}
+                      className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                      title="Bewertung löschen"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Watchlist Eye Button */}
+                <button
+                  onClick={handleWatchlistToggle}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isInWatchlist
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  title={isInWatchlist ? 'Aus Watchlist entfernen' : 'Zur Watchlist hinzufügen'}
+                >
+                  <span className="text-xl">
+                    {isInWatchlist ? '👁️' : '👁️‍🗨️'}
+                  </span>
+                  <span>
+                    {isInWatchlist ? 'Auf Liste' : 'Merken'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

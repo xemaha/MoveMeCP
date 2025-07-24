@@ -1,10 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import React from 'react'
+import { supabase, Movie, Tag } from '@/lib/supabase'
+
+interface MovieWithDetails extends Movie {
+  tags: Tag[]
+  averageRating: number
+  ratingCount: number
+}
 
 // Helper component to show top 20 tags by default, with 'Alle anzeigen' button
-import React from 'react'
-export function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
+function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
   const [showAll, setShowAll] = useState(false)
   const topTags = tags.slice(0, 20)
   return (
@@ -29,13 +36,6 @@ export function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
       )}
     </div>
   )
-}
-import { supabase, Movie, Tag } from '@/lib/supabase'
-
-interface MovieWithDetails extends Movie {
-  tags: Tag[]
-  averageRating: number
-  ratingCount: number
 }
 
 export function MovieGrid() {
@@ -72,7 +72,7 @@ export function MovieGrid() {
           const { data: ratings } = await supabase
             .from('ratings')
             .select('rating')
-            .eq('movie_id', movie.id)
+            .eq('movie_id', movie.id as string)
 
           // Get tags
           const { data: movieTags } = await supabase
@@ -84,11 +84,11 @@ export function MovieGrid() {
                 color
               )
             `)
-            .eq('movie_id', movie.id)
+            .eq('movie_id', movie.id as string)
 
-          const tags = movieTags?.map(mt => mt.tags).filter(Boolean) || []
+          const tags = movieTags?.map((mt: any) => mt.tags).filter(Boolean) || []
           const averageRating = ratings && ratings.length > 0 
-            ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length 
+            ? ratings.reduce((sum: number, r: any) => sum + (r.rating as number), 0) / ratings.length 
             : 0
           const ratingCount = ratings?.length || 0
 
@@ -97,7 +97,7 @@ export function MovieGrid() {
             tags,
             averageRating,
             ratingCount
-          }
+          } as MovieWithDetails
         })
       )
 
@@ -261,33 +261,33 @@ export function MovieGrid() {
               {movie.tags.length > 0 && (
                 <MovieTagsDisplay tags={movie.tags} />
               )}
-// Helper component to show top 20 tags by default, with 'Alle anzeigen' button
-import { useState } from 'react'
-function MovieTagsDisplay({ tags }: { tags: Tag[] }) {
-  const [showAll, setShowAll] = useState(false)
-  const topTags = tags.slice(0, 20)
-  return (
-    <div className="flex flex-wrap gap-1 mb-3">
-      {(showAll ? tags : topTags).map((tag) => (
-        <span
-          key={tag.id}
-          className="px-2 py-1 text-xs rounded-full text-white"
-          style={{ backgroundColor: tag.color }}
-        >
-          #{tag.name}
-        </span>
-      ))}
-      {tags.length > 20 && (
-        <button
-          type="button"
-          className="ml-2 text-xs text-blue-600 hover:underline focus:outline-none"
-          onClick={() => setShowAll(v => !v)}
-        >
-          {showAll ? 'Weniger anzeigen' : 'Alle anzeigen'}
-        </button>
+              
+              {/* Rating */}
+              <div className="space-y-2">
+                {movie.averageRating > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">⌀ Bewertung:</span>
+                    <div className="flex">{renderStars(movie.averageRating)}</div>
+                    <span className="text-sm text-gray-500">
+                      ({movie.averageRating.toFixed(1)}, {movie.ratingCount} {movie.ratingCount === 1 ? 'Bewertung' : 'Bewertungen'})
+                    </span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Bewerten:</span>
+                  <div className="flex">
+                    {renderStars(0, true, (rating) => handleAddRating(movie.id, rating))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
+}
 }
               
               {/* Rating */}
