@@ -56,6 +56,9 @@ export default function AddMovieForm() {
   const [genre, setGenre] = useState('')
   const [posterUrl, setPosterUrl] = useState('')
 
+  // Add watchlist state back
+  const [addToWatchlist, setAddToWatchlist] = useState(false)
+
   // Autocomplete für Filme (Supabase + TMDb)
   // Click outside ref for TMDb dropdown
   const tmdbDropdownRef = useRef<HTMLDivElement>(null);
@@ -232,7 +235,7 @@ export default function AddMovieForm() {
             genre: genre || null,
             trailer_url: trailerUrl || null,
           })
-          .eq('id', movieId ?? '');
+          .eq('id', movieId!);
         if (updateError) {
           console.error('Movie update error:', updateError);
           throw new Error(`Fehler beim Aktualisieren des Eintrags: ${updateError.message || updateError.details || 'Unbekannter Datenbankfehler'}`);
@@ -266,13 +269,20 @@ export default function AddMovieForm() {
         console.log('Neuer Eintrag erstellt');
       }
 
+      // Type guard: Ensure movieId is defined before proceeding
+      if (!movieId) {
+        throw new Error('Movie ID is missing - cannot proceed with ratings, watchlist, or tags');
+      }
+
+      console.log('🔍 Debug: Movie successfully created/updated with ID:', movieId, 'Type:', typeof movieId)
+
       // Add or update rating if provided
       if (rating > 0) {
         // Check if rating already exists for this user/movie
         const { data: existingRating, error: ratingFetchError } = await supabase
           .from('ratings')
           .select('id')
-          .eq('movie_id', movieId ?? '')
+          .eq('movie_id', movieId)
           .eq('user_id', user?.id ?? '')
           .maybeSingle();
 
@@ -307,6 +317,98 @@ export default function AddMovieForm() {
             console.error('Rating creation error:', ratingError);
             throw new Error(`Fehler beim Hinzufügen der Bewertung: ${ratingError.message || ratingError.details || 'Unbekannter Datenbankfehler'}`);
           }
+        }
+      }
+
+      // Add to watchlist if selected
+      if (addToWatchlist && user) {
+        try {
+          // Ensure we have valid IDs
+          if (!movieId || !user.id) {
+            console.error('❌ Missing required IDs for watchlist:', { movieId, userId: user.id })
+            throw new Error('Missing movie ID or user ID for watchlist')
+          }
+
+          console.log('🔍 Debug Watchlist - User Info:', {
+            userId: user.id,
+            userName: user.name,
+            userType: typeof user.id,
+            movieId: movieId,
+            movieIdType: typeof movieId,
+            userObject: user
+          })
+
+          // Validate user authentication
+          const { data: { user: currentUser }, error: authCheck } = await supabase.auth.getUser()
+          if (authCheck || !currentUser) {
+            console.error('❌ User not authenticated:', authCheck)
+            throw new Error('User authentication failed')
+          }
+
+          console.log('✅ User authentication verified:', currentUser.id)
+
+          // Check if already in watchlist
+          const { data: existingWatchlist, error: checkError } = await supabase
+            .from('watchlist')
+            .select('id')
+            .eq('movie_id', movieId)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          if (checkError) {
+            console.error('❌ Error checking existing watchlist:', checkError)
+            throw new Error(`Database error: ${checkError.message}`)
+          }
+
+          console.log('🔍 Existing watchlist check result:', existingWatchlist)
+
+          if (!existingWatchlist) {
+            // Add to watchlist
+            const watchlistData = {
+              movie_id: movieId,
+              user_id: user.id,
+            }
+            
+            console.log('🔍 Inserting watchlist data:', watchlistData)
+
+            const { data: insertResult, error: watchlistError } = await supabase
+              .from('watchlist')
+              .insert([watchlistData])
+              .select()
+
+            if (watchlistError) {
+              console.error('❌ Watchlist insert error:', {
+                error: watchlistError,
+                code: watchlistError.code,
+                message: watchlistError.message,
+                details: watchlistError.details,
+                hint: watchlistError.hint
+              })
+              throw new Error(`Failed to add to watchlist: ${watchlistError.message}`)
+            }
+
+            console.log('✅ Watchlist insert result:', insertResult)
+            
+            // Verify the insert by querying again
+            const { data: verifyData, error: verifyError } = await supabase
+              .from('watchlist')
+              .select('*')
+              .eq('movie_id', movieId)
+              .eq('user_id', user.id)
+            
+            if (verifyError) {
+              console.error('❌ Verification error:', verifyError)
+            } else {
+              console.log('🔍 Verification query result:', verifyData)
+            }
+            
+          } else {
+            console.log('ℹ️ Film ist bereits auf der Watchlist:', movieId)
+          }
+        } catch (watchlistError) {
+          console.error('❌ Error adding to watchlist:', watchlistError)
+          // Show error to user but don't fail the whole form submission
+          alert(`Warnung: Film wurde hinzugefügt, aber Watchlist-Fehler: ${watchlistError instanceof Error ? watchlistError.message : 'Unbekannter Fehler'}`)
         }
       }
 
@@ -377,13 +479,18 @@ export default function AddMovieForm() {
       setContentType('film')
       setRating(0)
       setTags('')
+      setAddToWatchlist(false) // Reset watchlist checkbox
       setSelectedMovie(null)
       setSuggestions([])
       setShowSuggestions(false)
       setTmdbSelected(false)
       
-      // Refresh the page to show updated data
-      window.location.reload()
+      // Wait a bit before refreshing to ensure database operations are complete
+      console.log('🎬 Film erfolgreich hinzugefügt, lade Seite neu...')
+      setTimeout(() => {
+        window.location.reload()
+      }, 500) // Wait 500ms before reload
+
     } catch (error) {
       console.error('Error adding movie:', error)
       
@@ -554,6 +661,29 @@ export default function AddMovieForm() {
             ))}
           </div>
         </div>
+
+        {/* Watchlist Checkbox */}
+        {user && (
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => setAddToWatchlist(!addToWatchlist)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                addToWatchlist
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={addToWatchlist ? 'Nicht zur Watchlist hinzufügen' : 'Zur Watchlist hinzufügen'}
+            >
+              <span className="text-lg">
+                {addToWatchlist ? '👁️' : '👁️‍🗨️'}
+              </span>
+              <span>
+                {addToWatchlist ? 'Auf Watchlist' : 'Zur Watchlist hinzufügen'}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="relative">
