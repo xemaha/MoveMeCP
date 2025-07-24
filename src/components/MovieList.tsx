@@ -826,6 +826,21 @@ export function MovieList() {
                     </p>
                   )}
 
+                  {/* YouTube Trailer Button */}
+                  {movie.trailer_url && (
+                    <div className="mb-3">
+                      <a
+                        href={movie.trailer_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs font-medium gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        🎬 Trailer ansehen
+                      </a>
+                    </div>
+                  )}
+
                   {/* Tags */}
                   {movie.tags.length > 0 && (
                     <TagDisplay tags={movie.tags} />
