@@ -463,22 +463,39 @@ export function MovieList() {
       (movie.actor && movie.actor.toLowerCase().includes(searchLower)) ||
       (movie.director && movie.director.toLowerCase().includes(searchLower))
 
-    // User filter
-    let matchesUserFilter = true
+    // User-specific type filter (watchlist/rated for current user)
+    let matchesUserTypeFilter = true
     if (user && filters.userType !== 'all') {
       if (filters.userType === 'rated') {
         const userRating = movie.ratings?.find(r => r.user_id === user.id)
-        matchesUserFilter = !!userRating && 
-          userRating.rating >= filters.minRating && 
-          userRating.rating <= filters.maxRating
+        matchesUserTypeFilter = !!userRating
       } else if (filters.userType === 'watchlist') {
-        matchesUserFilter = watchlistMovies.has(movie.id)
+        matchesUserTypeFilter = watchlistMovies.has(movie.id)
       }
-    } else if (filters.userName) {
-      const userRating = movie.ratings?.find(r => r.user_name === filters.userName)
-      matchesUserFilter = !!userRating &&
-        userRating.rating >= filters.minRating && 
-        userRating.rating <= filters.maxRating
+    }
+
+    // Rating range filter
+    let matchesRatingRange = true
+    
+    if (filters.userName) {
+      // Filter by specific selected user's ratings
+      const selectedUserRating = movie.ratings?.find(r => r.user_name === filters.userName)
+      if (selectedUserRating) {
+        matchesRatingRange = selectedUserRating.rating >= filters.minRating && 
+                           selectedUserRating.rating <= filters.maxRating
+      } else {
+        // User hasn't rated this movie
+        matchesRatingRange = filters.minRating === 0
+      }
+    } else {
+      // Filter by average rating of all users
+      if (movie.averageRating > 0) {
+        matchesRatingRange = movie.averageRating >= filters.minRating && 
+                           movie.averageRating <= filters.maxRating
+      } else {
+        // Movie has no ratings
+        matchesRatingRange = filters.minRating === 0
+      }
     }
 
     // Tag filter
@@ -498,7 +515,7 @@ export function MovieList() {
     // Content type filter
     const matchesContentType = filters.contentTypes[movie.content_type as keyof typeof filters.contentTypes]
 
-    return matchesSearch && matchesUserFilter && matchesTagFilter && matchesContentType
+    return matchesSearch && matchesUserTypeFilter && matchesRatingRange && matchesTagFilter && matchesContentType
   })
 
   // Helper functions
