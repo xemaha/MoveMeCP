@@ -23,9 +23,16 @@ interface MovieDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onMovieUpdated: () => void;
+  hideWatchlistFeature?: boolean
 }
 
-export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: MovieDetailModalProps) {
+export function MovieDetailModal({ 
+  movie, 
+  isOpen, 
+  onClose, 
+  onMovieUpdated,
+  hideWatchlistFeature = false 
+}: MovieDetailModalProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   // Map UI fields to DB fields (German names)
   const [editedMovie, setEditedMovie] = useState<any>({});
@@ -619,22 +626,24 @@ export function MovieDetailModal({ movie, isOpen, onClose, onMovieUpdated }: Mov
                 </div>
 
                 {/* Watchlist Eye Button */}
-                <button
-                  onClick={handleWatchlistToggle}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isInWatchlist
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                  title={isInWatchlist ? 'Aus Watchlist entfernen' : 'Zur Watchlist hinzufügen'}
-                >
-                  <span className="text-xl">
-                    {isInWatchlist ? '👁️' : '👁️‍🗨️'}
-                  </span>
-                  <span>
-                    {isInWatchlist ? 'Auf Liste' : 'Merken'}
-                  </span>
-                </button>
+                {!hideWatchlistFeature && (
+                  <button
+                    onClick={handleWatchlistToggle}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      isInWatchlist
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title={isInWatchlist ? 'Aus Watchlist entfernen' : 'Zur Watchlist hinzufügen'}
+                  >
+                    <span className="text-xl">
+                      {isInWatchlist ? '👁️' : '👁️‍🗨️'}
+                    </span>
+                    <span>
+                      {isInWatchlist ? 'Auf Liste' : 'Merken'}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -168,70 +168,144 @@ export function MovieList() {
     fetchTagUsage()
   }, [])
 
-  // Get available tags based on current filters (content type, user ratings, search)
+  // Filter movies based on search and user rating filter
+  const filteredMovies = movies.filter(movie => {
+    // Text search (now also includes actors and director)
+    const lowerQuery = searchQuery.toLowerCase();
+    const matchesSearch =
+      movie.title.toLowerCase().includes(lowerQuery) ||
+      movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery)) ||
+      (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
+      (movie.director && movie.director.toLowerCase().includes(lowerQuery));
+
+    // Rating filter: if user is selected, filter by their rating; otherwise, filter by averageRating
+    let matchesRatingFilter = true
+    if (userFilter.userName) {
+      const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+      if (userFilter.minRating === 0) {
+        // Show movies with no rating by this user, or in range
+        matchesRatingFilter = !userRating || (userRating.rating >= 1 && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5))
+      } else {
+        matchesRatingFilter = !!userRating && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+      }
+    } else {
+      if (userFilter.minRating === 0) {
+        // Show unrated movies (no ratings) or movies in range
+        matchesRatingFilter = movie.ratings.length === 0 || (movie.averageRating >= 1 && movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5))
+      } else {
+        matchesRatingFilter = movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5)
+      }
+    }
+
+    // User-specific filter logic
+    let matchesUserFilter = true
+    if (user && userFilter.type !== 'all') {
+      if (userFilter.type === 'rated') {
+        // Show only movies rated by current user
+        const userRating = movie.ratings.find(r => r.user_id === user.id)
+        matchesUserFilter = !!userRating && 
+          userRating.rating >= (userFilter.minRating ?? 0) && 
+          userRating.rating <= (userFilter.maxRating ?? 5)
+      } else if (userFilter.type === 'watchlist') {
+        // Show only movies in current user's watchlist
+        matchesUserFilter = watchlistMovies.has(movie.id)
+      }
+    } else if (userFilter.userName) {
+      const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+      if (!userRating) {
+        matchesUserFilter = false
+      } else {
+        matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
+      }
+    } else {
+      // Rating filter for all users
+      if (userFilter.minRating === 0) {
+        matchesUserFilter = movie.ratings.length === 0 || (movie.averageRating >= 1 && movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5))
+      } else {
+        matchesUserFilter = movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5)
+      }
+    }
+
+    // Tag filter
+    let matchesTagFilter = true
+    if (selectedTags.length > 0) {
+      if (requireAllTags) {
+        // AND: Movie must have all selected tags
+        matchesTagFilter = selectedTags.every(selectedTag =>
+          movie.tags.some(movieTag => movieTag.name === selectedTag)
+        )
+      } else {
+        // OR: Movie must have at least one selected tag
+        matchesTagFilter = selectedTags.some(selectedTag =>
+          movie.tags.some(movieTag => movieTag.name === selectedTag)
+        )
+      }
+    }
+
+    // Content type filter
+    const matchesContentTypeFilter = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+
+    return matchesSearch && matchesUserFilter && matchesTagFilter && matchesContentTypeFilter
+  })
+
+  // Get available tags based on current filters (content type, user ratings, search) - but NOT tag filter itself
   const availableTagsForCurrentFilters = allTags.filter(tag => {
     // Get movies that match current filters (excluding tag filter)
-      const filteredMovies = movies.filter(movie => {
-        // Text search filter - nur title, actor, director und tags durchsuchen
-        const lowerQuery = searchQuery.toLowerCase();
-        const matchesSearch = searchQuery === '' || 
-          movie.title.toLowerCase().includes(lowerQuery) ||
-          (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
-          (movie.director && movie.director.toLowerCase().includes(lowerQuery)) ||
-          movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery));
-  
-        // Content type filter
-        const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-  
-        // User rating filter
-        let matchesUserFilter = true
-        if (userFilter.userName) {
-          const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-          if (!userRating) {
-            matchesUserFilter = false
-          } else {
-            matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
-          }
+    const moviesWithoutTagFilter = movies.filter(movie => {
+      // Text search filter
+      const lowerQuery = searchQuery.toLowerCase();
+      const matchesSearch = searchQuery === '' || 
+        movie.title.toLowerCase().includes(lowerQuery) ||
+        (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
+        (movie.director && movie.director.toLowerCase().includes(lowerQuery)) ||
+        movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery));
+
+      // Content type filter
+      const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
+
+      // User-specific filter logic
+      let matchesUserFilter = true
+      if (user && userFilter.type !== 'all') {
+        if (userFilter.type === 'rated') {
+          const userRating = movie.ratings.find(r => r.user_id === user.id)
+          matchesUserFilter = !!userRating && 
+            userRating.rating >= (userFilter.minRating ?? 0) && 
+            userRating.rating <= (userFilter.maxRating ?? 5)
+        } else if (userFilter.type === 'watchlist') {
+          matchesUserFilter = watchlistMovies.has(movie.id)
         }
-  
-        return matchesSearch && matchesContentType && matchesUserFilter
-      })
-  
-      // Check if this tag is used by any of the filtered movies
-      return filteredMovies.some(movie => {
-        return movie.tags.some(movieTag => movieTag.name === tag.name)
-      })
-    }).map(tag => {
-      // Add count of how many movies have this tag
-      const filteredMovies = movies.filter(movie => {
-        // Apply all filters except tag filter
-        // Text search filter - nur title, actor, director und tags durchsuchen
-        const lowerQuery = searchQuery.toLowerCase();
-        const matchesSearch = searchQuery === '' || 
-          movie.title.toLowerCase().includes(lowerQuery) ||
-          (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
-          (movie.director && movie.director.toLowerCase().includes(lowerQuery)) ||
-          movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery));
-          
-        const matchesContentType = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-        let matchesUserFilter = true
-        if (userFilter.userName) {
-          const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-          if (!userRating) {
-            matchesUserFilter = false
-          } else {
-            matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
-          }
+      } else if (userFilter.userName) {
+        const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
+        if (!userRating) {
+          matchesUserFilter = false
+        } else {
+          matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
         }
-        return matchesSearch && matchesContentType && matchesUserFilter
-      })
-  
-      const count = filteredMovies.filter(movie => 
-        movie.tags.some(movieTag => movieTag.name === tag.name)
-      ).length
-  
-      return { ...tag, count }
+      } else {
+        // Rating filter for all users
+        if (userFilter.minRating === 0) {
+          matchesUserFilter = movie.ratings.length === 0 || (movie.averageRating >= 1 && movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5))
+        } else {
+          matchesUserFilter = movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5)
+        }
+      }
+
+      return matchesSearch && matchesContentType && matchesUserFilter
     })
+
+    // Check if this tag is used by any of the movies without tag filter
+    return moviesWithoutTagFilter.some(movie => {
+      return movie.tags.some(movieTag => movieTag.name === tag.name)
+    })
+  }).map(tag => {
+    // Add count of how many movies have this tag (with current filters INCLUDING tag filters applied)
+    const count = filteredMovies.filter(movie => 
+      movie.tags.some(movieTag => movieTag.name === tag.name)
+    ).length
+
+    return { ...tag, count }
+  }).filter(tag => tag.count > 0) // Only show tags that have movies
+
   // Clear selected tags that are no longer available when filters change
   useEffect(() => {
     if (selectedTags.length > 0) {
@@ -303,9 +377,12 @@ export function MovieList() {
     }
   }
 
-  const fetchMoviesWithDetails = async () => {
+  // Enhanced movie fetching that also checks for new watchlist entries
+  const fetchMoviesWithDetails = async (checkForNewWatchlistMovies = false) => {
     try {
       setIsLoading(true)
+      const previousMovieIds = new Set(movies.map(m => m.id))
+      
       // Fetch movies
       const { data: moviesData, error: moviesError } = await supabase
         .from('movies')
@@ -366,6 +443,34 @@ export function MovieList() {
       )
 
       setMovies(moviesWithDetails)
+      
+      // Check for new movies if requested
+      if (checkForNewWatchlistMovies && user) {
+        const newMovies = moviesWithDetails.filter(movie => !previousMovieIds.has(movie.id))
+        console.log('🎬 Checking new movies for watchlist:', newMovies.map(m => ({ id: m.id, title: m.title })))
+        
+        for (const newMovie of newMovies) {
+          // Check if this new movie is in the watchlist
+          const { data: watchlistEntry } = await supabase
+            .from('watchlist')
+            .select('movie_id')
+            .eq('user_id', user.id)
+            .eq('movie_id', newMovie.id)
+            .maybeSingle()
+          
+          if (watchlistEntry) {
+            console.log('🎬 Found new movie in watchlist:', newMovie.title, newMovie.id)
+            addToWatchlistState(newMovie.id)
+          }
+        }
+      }
+      
+      // Force watchlist refresh after movies are loaded
+      if (user) {
+        setTimeout(() => {
+          refreshWatchlist()
+        }, 100)
+      }
     } catch (error: any) {
       console.error('Error fetching movies:', error)
       setError('Fehler beim Laden der Filme: ' + (error.message || error.details || JSON.stringify(error)))
@@ -373,81 +478,6 @@ export function MovieList() {
       setIsLoading(false)
     }
   }
-
-  // Filter movies based on search and user rating filter
-  const filteredMovies = movies.filter(movie => {
-    // Text search (now also includes actors and director)
-    const lowerQuery = searchQuery.toLowerCase();
-    const matchesSearch =
-      movie.title.toLowerCase().includes(lowerQuery) ||
-      movie.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery)) ||
-      (movie.actor && movie.actor.toLowerCase().includes(lowerQuery)) ||
-      (movie.director && movie.director.toLowerCase().includes(lowerQuery));
-
-    // Rating filter: if user is selected, filter by their rating; otherwise, filter by averageRating
-    let matchesRatingFilter = true
-    if (userFilter.userName) {
-      const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-      if (userFilter.minRating === 0) {
-        // Show movies with no rating by this user, or in range
-        matchesRatingFilter = !userRating || (userRating.rating >= 1 && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5))
-      } else {
-        matchesRatingFilter = !!userRating && userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
-      }
-    } else {
-      if (userFilter.minRating === 0) {
-        // Show unrated movies (no ratings) or movies in range
-        matchesRatingFilter = movie.ratings.length === 0 || (movie.averageRating >= 1 && movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5))
-      } else {
-        matchesRatingFilter = movie.averageRating >= (userFilter.minRating ?? 0) && movie.averageRating <= (userFilter.maxRating ?? 5)
-      }
-    }
-
-    // User-specific filter logic
-    let matchesUserFilter = true
-    if (user && userFilter.type !== 'all') {
-      if (userFilter.type === 'rated') {
-        // Show only movies rated by current user
-        const userRating = movie.ratings.find(r => r.user_id === user.id)
-        matchesUserFilter = !!userRating && 
-          userRating.rating >= (userFilter.minRating ?? 0) && 
-          userRating.rating <= (userFilter.maxRating ?? 5)
-      } else if (userFilter.type === 'watchlist') {
-        // Show only movies in current user's watchlist
-        matchesUserFilter = watchlistMovies.has(movie.id)
-      }
-    } else if (userFilter.userName) {
-      const userRating = movie.ratings.find(r => r.user_name === userFilter.userName)
-      if (!userRating) {
-        matchesUserFilter = false
-      } else {
-        matchesUserFilter = userRating.rating >= (userFilter.minRating ?? 0) && userRating.rating <= (userFilter.maxRating ?? 5)
-      }
-    } else {
-      // ...existing average rating filter logic...
-    }
-
-    // Tag filter
-    let matchesTagFilter = true
-    if (selectedTags.length > 0) {
-      if (requireAllTags) {
-        // AND: Movie must have all selected tags
-        matchesTagFilter = selectedTags.every(selectedTag =>
-          movie.tags.some(movieTag => movieTag.name === selectedTag)
-        )
-      } else {
-        // OR: Movie must have at least one selected tag
-        matchesTagFilter = selectedTags.some(selectedTag =>
-          movie.tags.some(movieTag => movieTag.name === selectedTag)
-        )
-      }
-    }
-
-    // Content type filter
-    const matchesContentTypeFilter = contentTypeFilter[movie.content_type as keyof ContentTypeFilter] || false
-
-    return matchesSearch && matchesUserFilter && matchesTagFilter && matchesContentTypeFilter
-  })
 
   // Helper: count how many selected tags a movie has
   function countMatchingTags(movieTags: Tag[], selectedTags: string[]): number {
@@ -612,31 +642,100 @@ export function MovieList() {
     setMovies(movies.filter(movie => movie.id !== movieId))
   }
 
-  // Neuer useEffect für Watchlist laden
-  useEffect(() => {
-    const fetchWatchlistStatus = async () => {
-      if (!user) {
-        setWatchlistMovies(new Set())
+  // Function to manually add movie to watchlist state
+  const addToWatchlistState = (movieId: string) => {
+    console.log('Debug: Manually adding to watchlist state:', movieId)
+    setWatchlistMovies(prev => {
+      const newSet = new Set(prev)
+      newSet.add(movieId)
+      console.log('Debug: New watchlist state:', Array.from(newSet))
+      return newSet
+    })
+  }
+
+  // Function to manually remove movie from watchlist state  
+  const removeFromWatchlistState = (movieId: string) => {
+    console.log('Debug: Manually removing from watchlist state:', movieId)
+    setWatchlistMovies(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(movieId)
+      console.log('Debug: New watchlist state:', Array.from(newSet))
+      return newSet
+    })
+  }
+
+  // Enhanced refresh function that forces a complete refresh
+  const forceRefreshWatchlist = async () => {
+    if (!user) {
+      setWatchlistMovies(new Set())
+      return
+    }
+    
+    try {
+      console.log('Debug: Force refreshing watchlist for user:', user.id)
+      
+      // Clear current state first
+      setWatchlistMovies(new Set())
+      
+      // Wait a bit for any pending operations
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      const { data, error } = await supabase
+        .from('watchlist')
+        .select('movie_id')
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Debug: Error fetching watchlist:', error)
         return
       }
-      
-      try {
-        const { data, error } = await supabase
-          .from('watchlist')
-          .select('movie_id')
-          .eq('user_id', user.id)
 
-        if (!error && data) {
-          const watchlistIds = new Set(data.map(item => item.movie_id as string))
-          setWatchlistMovies(watchlistIds)
-        }
-      } catch (error) {
-        console.error('Error fetching watchlist:', error)
+      console.log('Debug: Fresh watchlist data:', data)
+      if (data) {
+        const watchlistIds = new Set(data.map(item => item.movie_id as string))
+        console.log('Debug: Setting fresh watchlist IDs:', Array.from(watchlistIds))
+        setWatchlistMovies(watchlistIds)
       }
+    } catch (error) {
+      console.error('Debug: Exception in forceRefreshWatchlist:', error)
     }
+  }
 
-    fetchWatchlistStatus()
-  }, [user])
+  // Separate function for refreshing watchlist
+  const refreshWatchlist = async () => {
+    if (!user) {
+      console.log('Debug: No user, clearing watchlist')
+      setWatchlistMovies(new Set())
+      return
+    }
+    
+    try {
+      console.log('Debug: Refreshing watchlist for user:', user.id)
+      const { data, error } = await supabase
+        .from('watchlist')
+        .select('movie_id')
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Debug: Error fetching watchlist:', error)
+        return
+      }
+
+      console.log('Debug: Watchlist data:', data)
+      if (data) {
+        const watchlistIds = new Set(data.map(item => item.movie_id as string))
+        console.log('Debug: Setting watchlist IDs:', Array.from(watchlistIds))
+        setWatchlistMovies(watchlistIds)
+      }
+    } catch (error) {
+      console.error('Debug: Exception in refreshWatchlist:', error)
+    }
+  }
+
+  // Neuer useEffect für Watchlist laden
+  useEffect(() => {
+    refreshWatchlist()
+  }, [user, movies]) // Add movies dependency to refresh when movies change
 
   // Neue Funktion für Watchlist Toggle mit UUID-Konvertierung
   const handleWatchlistToggle = async (movieId: string) => {
@@ -702,6 +801,26 @@ export function MovieList() {
 
   const isInWatchlist = (movieId: string): boolean => {
     return watchlistMovies.has(movieId)
+  }
+
+  // Add debug function to check watchlist state
+  const debugWatchlist = async () => {
+    if (!user) return
+    
+    console.log('Debug: Current user:', user.id, user.name)
+    
+    try {
+      const { data, error } = await supabase
+        .from('watchlist')
+        .select('*')
+        .eq('user_id', user.id)
+
+      console.log('Debug: Watchlist data from DB:', data)
+      console.log('Debug: Watchlist error:', error)
+      console.log('Debug: Current watchlistMovies state:', Array.from(watchlistMovies))
+    } catch (error) {
+      console.error('Debug: Error fetching watchlist:', error)
+    }
   }
 
   if (isLoading) {
@@ -929,7 +1048,10 @@ export function MovieList() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {(showAllTags ? allTagsSorted : topTags).map(tag => (
+            {(showAllTags ? 
+              availableTagsForCurrentFilters.sort((a, b) => a.name.localeCompare(b.name)) : 
+              availableTagsForCurrentFilters.sort((a, b) => (tagUsageCount[b.name] || 0) - (tagUsageCount[a.name] || 0)).slice(0, 20)
+            ).map(tag => (
               <button
                 key={tag.id}
                 onClick={() => {
@@ -941,11 +1063,11 @@ export function MovieList() {
                 style={{ backgroundColor: tag.color }}
               >
                 {tag.name}
-                <span className="ml-1 text-xs">({getMovieCountForTag(tag.name)})</span>
+                <span className="ml-1 text-xs">({tag.count})</span>
               </button>
             ))}
           </div>
-          {(allTags.length > 20) && (
+          {(availableTagsForCurrentFilters.length > 20) && (
             <button
               type="button"
               className="mt-2 text-xs text-blue-600 hover:underline focus:outline-none"
@@ -1215,10 +1337,16 @@ export function MovieList() {
           movie={selectedMovieForEdit}
           isOpen={true}
           onClose={() => setSelectedMovieForEdit(null)}
-          onMovieUpdated={() => {
-            fetchMoviesWithDetails()
+          onMovieUpdated={async (updatedMovie?: any) => {
+            console.log('🎬 Debug: onMovieUpdated called!')
+            
+            // Simple approach: just reload everything
+            // The useEffect will automatically handle watchlist updates when movies.length changes
+            await fetchMoviesWithDetails()
+            
             setSelectedMovieForEdit(null)
           }}
+          hideWatchlistFeature={true} // Neue Prop um Watchlist-Feature zu verstecken
         />
       )}
     </div>

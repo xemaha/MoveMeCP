@@ -56,9 +56,6 @@ export default function AddMovieForm() {
   const [genre, setGenre] = useState('')
   const [posterUrl, setPosterUrl] = useState('')
 
-  // Add watchlist state
-  const [addToWatchlist, setAddToWatchlist] = useState(false)
-
   // Autocomplete für Filme (Supabase + TMDb)
   // Click outside ref for TMDb dropdown
   const tmdbDropdownRef = useRef<HTMLDivElement>(null);
@@ -313,40 +310,6 @@ export default function AddMovieForm() {
         }
       }
 
-      // Add to watchlist if selected
-      if (addToWatchlist && user) {
-        try {
-          // Check if already in watchlist
-          const { data: existingWatchlist } = await supabase
-            .from('watchlist')
-            .select('id')
-            .eq('movie_id', movieId ?? '')
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-          if (!existingWatchlist) {
-            // Add to watchlist
-            const { error: watchlistError } = await supabase
-              .from('watchlist')
-              .insert([
-                {
-                  movie_id: movieId,
-                  user_id: user.id,
-                  user_name: user.name,
-                },
-              ])
-
-            if (watchlistError) {
-              console.error('Watchlist error:', watchlistError)
-              throw new Error(`Fehler beim Hinzufügen zur Watchlist: ${watchlistError.message}`)
-            }
-          }
-        } catch (watchlistError) {
-          console.error('Error adding to watchlist:', watchlistError)
-          // Don't fail the whole form submission for watchlist errors
-        }
-      }
-
       // Add tags if provided
       if (tags.trim()) {
         const tagNames = tags.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean)
@@ -414,7 +377,6 @@ export default function AddMovieForm() {
       setContentType('film')
       setRating(0)
       setTags('')
-      setAddToWatchlist(false) // Reset watchlist checkbox
       setSelectedMovie(null)
       setSuggestions([])
       setShowSuggestions(false)
@@ -592,29 +554,6 @@ export default function AddMovieForm() {
             ))}
           </div>
         </div>
-
-        {/* Watchlist Checkbox */}
-        {user && (
-          <div className="flex items-center space-x-3">
-            <button
-              type="button"
-              onClick={() => setAddToWatchlist(!addToWatchlist)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                addToWatchlist
-                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              title={addToWatchlist ? 'Nicht zur Watchlist hinzufügen' : 'Zur Watchlist hinzufügen'}
-            >
-              <span className="text-lg">
-                {addToWatchlist ? '👁️' : '👁️‍🗨️'}
-              </span>
-              <span>
-                {addToWatchlist ? 'Auf Watchlist' : 'Zur Watchlist hinzufügen'}
-              </span>
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="relative">
