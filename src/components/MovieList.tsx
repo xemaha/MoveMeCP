@@ -231,7 +231,11 @@ export function MovieList() {
       
       if (ratingsResult.data) {
         ratingsResult.data.forEach((r: any) => {
-          if (r.user_name && typeof r.user_name === 'string') {
+          // Nur echte Namen hinzufügen, keine UUIDs
+          if (r.user_name && 
+              typeof r.user_name === 'string' && 
+              r.user_name.trim() !== '' &&
+              !r.user_name.match(/^[0-9a-f-]{36}$/i)) { // UUID Pattern ausschließen
             userSet.add(r.user_name)
           }
         })
@@ -239,7 +243,10 @@ export function MovieList() {
       
       if (moviesResult.data) {
         moviesResult.data.forEach((m: any) => {
-          if (m.created_by && typeof m.created_by === 'string') {
+          if (m.created_by && 
+              typeof m.created_by === 'string' && 
+              m.created_by.trim() !== '' &&
+              !m.created_by.match(/^[0-9a-f-]{36}$/i)) { // UUID Pattern ausschließen
             userSet.add(m.created_by)
           }
         })
@@ -656,9 +663,9 @@ export function MovieList() {
                 })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="all">🎬 Alle Filme</option>
-                <option value="rated">⭐ Nur bewertete Filme</option>
-                <option value="watchlist">👁️ Nur Watchlist</option>
+                <option value="all">🎬 Alle</option>
+                <option value="rated">⭐ Nur von mir bewertete</option>
+                <option value="watchlist">👁️ Nur meine Watchlist</option>
               </select>
             </div>
           )}
