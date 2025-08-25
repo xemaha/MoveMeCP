@@ -32,9 +32,6 @@ function AppContent() {
           {/* Add Movie Form */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Film hinzufügen
-              </h2>
               <AddMovieForm />
             </div>
           </div>
@@ -43,7 +40,7 @@ function AppContent() {
           <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Deine Filme
+                Deine Medien
               </h2>
               <MovieList />
             </div>

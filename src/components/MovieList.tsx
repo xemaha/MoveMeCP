@@ -97,7 +97,7 @@ export function MovieList() {
     contentTypes: {
       film: true,
       serie: true,
-      buch: false
+      buch: true
     }
   })
   
@@ -522,15 +522,9 @@ export function MovieList() {
     // Tag filter
     let matchesTagFilter = true
     if (filters.selectedTags.length > 0) {
-      if (filters.requireAllTags) {
-        matchesTagFilter = filters.selectedTags.every(selectedTag =>
-          movie.tags?.some(movieTag => movieTag.name === selectedTag)
-        )
-      } else {
-        matchesTagFilter = filters.selectedTags.some(selectedTag =>
-          movie.tags?.some(movieTag => movieTag.name === selectedTag)
-        )
-      }
+      matchesTagFilter = filters.selectedTags.every(selectedTag =>
+        movie.tags?.some(movieTag => movieTag.name === selectedTag)
+      )
     }
 
     // Content type filter

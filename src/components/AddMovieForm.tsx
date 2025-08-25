@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
 import { searchTMDb, getTMDbDetails } from '@/lib/tmdbApi'
+import { searchGoogleBooks } from '@/lib/googleBooksApi'
 import type { MovieDetails } from '@/lib/types'
 
 interface MovieSuggestion {
@@ -25,6 +26,20 @@ interface TmdbSuggestion {
 }
 
 export default function AddMovieForm() {
+  // Handler für Google Books Auswahl
+  const handleBookSuggestionClick = (book: any) => {
+    setTitle(book.title);
+    setDescription(book.description);
+    setYear(book.publishedDate ? book.publishedDate.slice(0, 4) : '');
+    setGenre(book.categories?.join(', ') ?? '');
+    setPosterUrl(book.cover);
+    setDirector('');
+    setActor(book.authors);
+    setShowBookSuggestions(false);
+  };
+  // Google Books Autocomplete
+  const [bookSuggestions, setBookSuggestions] = useState<any[]>([]);
+  const [showBookSuggestions, setShowBookSuggestions] = useState(false);
   // Tag Autocomplete
   const [allTags, setAllTags] = useState<{ name: string; color: string }[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -105,7 +120,6 @@ export default function AddMovieForm() {
           const data = await res.json();
           if (!ignore) {
             if (data && data.results && data.results.length > 0) {
-              // Filtere nach Typ
               setTmdbSuggestions(data.results.filter((r: any) => r.media_type === tmdbType));
               setShowTmdbSuggestions(true);
             } else {
@@ -119,7 +133,27 @@ export default function AddMovieForm() {
             setShowTmdbSuggestions(false);
           }
         }
-      } else {
+        setBookSuggestions([]);
+        setShowBookSuggestions(false);
+      } else if (contentType === 'buch') {
+        // Google Books Autocomplete
+        try {
+          const books = await searchGoogleBooks(title.trim());
+          if (!ignore) {
+            if (books && books.length > 0) {
+              setBookSuggestions(books);
+              setShowBookSuggestions(true);
+            } else {
+              setBookSuggestions([]);
+              setShowBookSuggestions(false);
+            }
+          }
+        } catch (error) {
+          if (!ignore) {
+            setBookSuggestions([]);
+            setShowBookSuggestions(false);
+          }
+        }
         setTmdbSuggestions([]);
         setShowTmdbSuggestions(false);
       }
@@ -128,10 +162,10 @@ export default function AddMovieForm() {
     return () => { ignore = true; };
   }, [title, contentType]);
 
-  // Click outside handler for OMDb dropdown (schließt nur, wenn explizit außerhalb getippt wird, nicht bei Input-Blur)
+  // Click outside handler for TMDb/Book dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
-      if (!showTmdbSuggestions) return;
+      if (!showTmdbSuggestions && !showBookSuggestions) return;
       const input = document.getElementById('title');
       if (
         tmdbDropdownRef.current &&
@@ -140,7 +174,19 @@ export default function AddMovieForm() {
         !input.contains(event.target as Node)
       ) {
         setShowTmdbSuggestions(false);
+        setShowBookSuggestions(false);
       }
+  // Google Books Auswahl
+  const handleBookSuggestionClick = (book: any) => {
+    setTitle(book.title);
+    setDescription(book.description);
+    setYear(book.publishedDate ? book.publishedDate.slice(0, 4) : '');
+    setGenre(book.categories?.join(', ') ?? '');
+    setPosterUrl(book.cover);
+    setDirector('');
+    setActor(book.authors);
+    setShowBookSuggestions(false);
+  };
     }
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('touchstart', handleClickOutside);
@@ -520,6 +566,7 @@ export default function AddMovieForm() {
 
     return (
       <form onSubmit={handleSubmit} className="space-y-6">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Titel hinzufügen</h2>
       {/* Typ Dropdown */}
       <div>
         <label htmlFor="contentType" className="block text-sm font-medium text-gray-700 mb-1">Typ *</label>
@@ -545,7 +592,7 @@ export default function AddMovieForm() {
         </select>
       </div>
 
-      {/* Title Input (mit/ohne Autocomplete je nach Typ) */}
+  {/* Title Input (mit/ohne Autocomplete je nach Typ) */}
       <div className="relative">
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
           Titel *
@@ -568,55 +615,84 @@ export default function AddMovieForm() {
           disabled={isLoading}
         />
 
-        {/* TMDb Autocomplete Dropdown - nur für Film/Serie */}
-        {contentType !== 'buch' && showTmdbSuggestions && tmdbSuggestions.length > 0 && (
-          <div
-            ref={tmdbDropdownRef}
-            className="absolute z-50 mt-1 w-full bg-white border border-blue-400 rounded-md shadow-2xl max-h-80 overflow-y-auto left-0"
-            style={{ top: '100%' }}
-          >
-            {/* Mobile Close Button */}
-            <div className="block sm:hidden sticky top-0 bg-white z-10 text-right p-2 border-b border-gray-200">
-              <button
-                type="button"
-                className="text-gray-500 text-lg px-2 py-1"
-                onClick={() => setShowTmdbSuggestions(false)}
-                aria-label="Schließen"
-              >
-                ✕
-              </button>
-            </div>
-            {tmdbSuggestions.map((tmdb) => (
-              <div
-                key={tmdb.id}
-                onClick={async () => {
-                  await handleTmdbSuggestionClick(tmdb);
-                  // Nach Auswahl Fokus auf das nächste Feld (z.B. Beschreibung)
-                  setTimeout(() => {
-                    const descInput = document.getElementById('description');
-                    if (descInput) (descInput as HTMLInputElement).focus();
-                  }, 0);
-                }}
-                className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
-              >
-                {tmdb.poster_path && (
-                  <img src={`https://image.tmdb.org/t/p/w92${tmdb.poster_path}`} alt={tmdb.title || tmdb.name} className="w-8 h-12 object-cover rounded mr-2" />
-                )}
-                <div>
-                  <span className="font-medium">{tmdb.title || tmdb.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">
-                    {tmdb.media_type === 'movie' ? 'Film' : tmdb.media_type === 'tv' ? 'Serie' : ''}
-                  </span>
-                  {(tmdb.release_date || tmdb.first_air_date) && (
-                    <span className="ml-2 text-xs text-gray-500">
-                      {((tmdb.release_date || tmdb.first_air_date) ?? '').slice(0, 4)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+  {/* TMDb/Google Books Autocomplete Dropdown */}
+  {(contentType !== 'buch' && showTmdbSuggestions && tmdbSuggestions.length > 0) || (contentType === 'buch' && showBookSuggestions && bookSuggestions.length > 0) ? (
+    <div
+      ref={tmdbDropdownRef}
+      className={`absolute z-50 mt-1 w-full bg-white border rounded-md shadow-2xl max-h-80 overflow-y-auto left-0 ${contentType === 'buch' ? 'border-green-400' : 'border-blue-400'}`}
+      style={{ top: '100%' }}
+    >
+      {/* TMDb Dropdown */}
+      {contentType !== 'buch' && showTmdbSuggestions && tmdbSuggestions.length > 0 && (
+        <>
+          {/* Mobile Close Button */}
+          <div className="block sm:hidden sticky top-0 bg-white z-10 text-right p-2 border-b border-gray-200">
+            <button
+              type="button"
+              className="text-gray-500 text-lg px-2 py-1"
+              onClick={() => setShowTmdbSuggestions(false)}
+              aria-label="Schließen"
+            >
+              ✕
+            </button>
           </div>
-        )}
+          {tmdbSuggestions.map((tmdb) => (
+            <div
+              key={tmdb.id}
+              onClick={async () => {
+                await handleTmdbSuggestionClick(tmdb);
+                setTimeout(() => {
+                  const descInput = document.getElementById('description');
+                  if (descInput) (descInput as HTMLInputElement).focus();
+                }, 0);
+              }}
+              className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+            >
+              {tmdb.poster_path && (
+                <img src={`https://image.tmdb.org/t/p/w92${tmdb.poster_path}`} alt={tmdb.title || tmdb.name} className="w-8 h-12 object-cover rounded mr-2" />
+              )}
+              <div>
+                <span className="font-medium">{tmdb.title || tmdb.name}</span>
+                <span className="ml-2 text-xs text-gray-500">
+                  {tmdb.media_type === 'movie' ? 'Film' : tmdb.media_type === 'tv' ? 'Serie' : ''}
+                </span>
+                {(tmdb.release_date || tmdb.first_air_date) && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    {((tmdb.release_date || tmdb.first_air_date) ?? '').slice(0, 4)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+      {/* Google Books Dropdown */}
+      {contentType === 'buch' && showBookSuggestions && bookSuggestions.length > 0 && (
+        <>
+          {bookSuggestions.map((book) => (
+            <div
+              key={book.id}
+              onClick={() => handleBookSuggestionClick(book)}
+              className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+            >
+              {book.cover && (
+                <img src={book.cover} alt={book.title} className="w-8 h-12 object-cover rounded mr-2" />
+              )}
+              <div>
+                <span className="font-medium">{book.title}</span>
+                {book.authors && (
+                  <span className="ml-2 text-xs text-gray-500">{book.authors}</span>
+                )}
+                {book.publishedDate && (
+                  <span className="ml-2 text-xs text-gray-500">{book.publishedDate.slice(0, 4)}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  ) : null}
 
         {/* Poster Preview (direkt nach TMDb-Auswahl) */}
         {posterUrl && (
@@ -662,7 +738,7 @@ export default function AddMovieForm() {
           </div>
         </div>
 
-        {/* Watchlist Checkbox */}
+        {/* Watchlist/Readlist Checkbox */}
         {user && (
           <div className="flex items-center space-x-3">
             <button
@@ -673,13 +749,23 @@ export default function AddMovieForm() {
                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
-              title={addToWatchlist ? 'Nicht zur Watchlist hinzufügen' : 'Zur Watchlist hinzufügen'}
+              title={addToWatchlist
+                ? contentType === 'buch'
+                  ? 'Nicht zur Readlist hinzufügen'
+                  : 'Nicht zur Watchlist hinzufügen'
+                : contentType === 'buch'
+                  ? 'Zur Readlist hinzufügen'
+                  : 'Zur Watchlist hinzufügen'}
             >
               <span className="text-lg">
-                {addToWatchlist ? '👁️' : '👁️‍🗨️'}
+                {contentType === 'buch'
+                  ? addToWatchlist ? '📚' : '📖'
+                  : addToWatchlist ? '👁️' : '👁️‍🗨️'}
               </span>
               <span>
-                {addToWatchlist ? 'Auf Watchlist' : 'Zur Watchlist hinzufügen'}
+                {addToWatchlist
+                  ? contentType === 'buch' ? 'Auf Readlist' : 'Auf Watchlist'
+                  : contentType === 'buch' ? 'Zur Readlist hinzufügen' : 'Zur Watchlist hinzufügen'}
               </span>
             </button>
           </div>
