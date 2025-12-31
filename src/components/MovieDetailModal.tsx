@@ -208,6 +208,10 @@ export function MovieDetailModal({
 
   const [isInWatchlist, setIsInWatchlist] = useState<boolean>(false);
   const [userRating, setUserRating] = useState<number>(0);
+  const [userReviewText, setUserReviewText] = useState<string>('');
+  const [isEditingReview, setIsEditingReview] = useState<boolean>(false);
+  const [editReviewText, setEditReviewText] = useState<string>('');
+  const [otherReviews, setOtherReviews] = useState<Array<{ rating: number; review_text: string; user_name: string }>>([]);
 
   useEffect(() => {
     const fetchWatchlistStatus = async () => {
@@ -238,26 +242,60 @@ export function MovieDetailModal({
     const fetchUserRating = async () => {
       if (!user || !movie) {
         setUserRating(0);
+        setUserReviewText('');
         return;
       }
       
       try {
         const { data, error } = await supabase
           .from('ratings')
-          .select('rating')
+          .select('rating, review_text')
           .eq('movie_id', movie.id)
           .eq('user_id', user.id)
           .single();
 
-        setUserRating(!error && data ? (data.rating as number) : 0);
+        if (!error && data) {
+          setUserRating(data.rating as number);
+          setUserReviewText((data.review_text as string) || '');
+        } else {
+          setUserRating(0);
+          setUserReviewText('');
+        }
       } catch (error) {
         console.error('Error fetching user rating:', error);
         setUserRating(0);
+        setUserReviewText('');
       }
     };
 
     fetchUserRating();
   }, [user, movie]);
+
+  useEffect(() => {
+    const loadOtherReviews = async () => {
+      if (!movie || !user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('ratings')
+          .select('rating, review_text, user_name')
+          .eq('movie_id', movie.id)
+          .neq('user_id', user.id)
+          .not('review_text', 'is', null)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          setOtherReviews(data as Array<{ rating: number; review_text: string; user_name: string }>);
+        }
+      } catch (error) {
+        console.error('Error loading other reviews:', error);
+      }
+    };
+
+    if (isOpen) {
+      loadOtherReviews();
+    }
+  }, [isOpen, user, movie]);
 
   const handleStarClick = async (rating: number) => {
     if (!user || !movie) {
@@ -332,11 +370,65 @@ export function MovieDetailModal({
       }
 
       setUserRating(0);
+      setUserReviewText('');
       console.log('Bewertung erfolgreich gelöscht!');
       
     } catch (error) {
       console.error('Error deleting rating:', error);
       alert('Fehler beim Löschen der Bewertung');
+    }
+  };
+
+  const handleSaveReviewText = async () => {
+    if (!user || !movie) return;
+    
+    try {
+      // Check if rating exists
+      const { data: existingRating, error: fetchError } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('movie_id', movie.id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingRating) {
+        // Update existing rating with new review text
+        const { error } = await supabase
+          .from('ratings')
+          .update({ review_text: editReviewText.trim() || null })
+          .eq('id', existingRating.id as string);
+
+        if (error) {
+          console.error('Error updating review text:', error);
+          alert('Fehler beim Speichern des Bewertungstextes');
+          return;
+        }
+      } else {
+        // Create new rating with review text only (rating = 0 if not set)
+        const { error } = await supabase
+          .from('ratings')
+          .insert([{
+            movie_id: movie.id,
+            rating: userRating || 0,
+            review_text: editReviewText.trim() || null,
+            user_id: user.id,
+            user_name: user.name,
+          }]);
+
+        if (error) {
+          console.error('Error creating review:', error);
+          alert('Fehler beim Speichern des Bewertungstextes');
+          return;
+        }
+      }
+
+      setUserReviewText(editReviewText.trim());
+      setIsEditingReview(false);
+      console.log('Bewertungstext erfolgreich gespeichert!');
+      
+    } catch (error) {
+      console.error('Error saving review text:', error);
+      alert('Fehler beim Speichern des Bewertungstextes');
     }
   };
 
@@ -644,6 +736,90 @@ export function MovieDetailModal({
                     </span>
                   </button>
                 )}
+              </div>
+
+              {/* User Review Text - Editable */}
+              <div className="mt-3">
+                {isEditingReview ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editReviewText}
+                      onChange={(e) => setEditReviewText(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Deine Gedanken zum Film, Serie oder Buch..."
+                      rows={4}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveReviewText}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                      >
+                        Speichern
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingReview(false);
+                          setEditReviewText(userReviewText);
+                        }}
+                        className="px-3 py-1 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 text-sm"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {userReviewText ? (
+                      <div className="p-3 bg-white rounded border border-blue-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{userReviewText}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">Noch keine Textbewertung</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        setEditReviewText(userReviewText);
+                        setIsEditingReview(true);
+                      }}
+                      className="mt-2 px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+                    >
+                      {userReviewText ? '✏️ Bearbeiten' : '+ Bewertungstext hinzufügen'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Other Reviews Section - Always visible with clear separation */}
+          {user && otherReviews.length > 0 && (
+            <div className="mt-6 pt-6 border-t-2 border-gray-300">
+              <h4 className="text-sm font-semibold text-gray-800 mb-4">
+                Bewertungen anderer Nutzer:
+              </h4>
+              <div className="space-y-3">
+                {otherReviews.map((review, index) => (
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-sm text-gray-800">{review.user_name}</span>
+                      <div className="flex items-center">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span
+                            key={star}
+                            className={`text-lg ${
+                              star <= review.rating ? 'text-yellow-400' : 'text-gray-300'
+                            }`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {review.review_text && (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{review.review_text}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

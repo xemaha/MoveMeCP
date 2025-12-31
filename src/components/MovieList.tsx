@@ -29,7 +29,6 @@ interface FilterSettings {
   minRating: number
   maxRating: number
   selectedTags: string[]
-  requireAllTags: boolean
   contentTypes: {
     film: boolean
     serie: boolean
@@ -93,7 +92,6 @@ export function MovieList() {
     minRating: 0,
     maxRating: 5,
     selectedTags: [],
-    requireAllTags: true,
     contentTypes: {
       film: true,
       serie: true,
@@ -747,24 +745,14 @@ export function MovieList() {
         <div className="bg-blue-50 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-700">Tags</h3>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={filters.requireAllTags}
-                  onChange={(e) => updateFilters({ requireAllTags: e.target.checked })}
-                />
-                Alle Tags erforderlich
-              </label>
-              {filters.selectedTags.length > 0 && (
-                <button
-                  onClick={() => updateFilters({ selectedTags: [] })}
-                  className="text-xs text-blue-600 underline"
-                >
-                  Zurücksetzen
-                </button>
-              )}
-            </div>
+            {filters.selectedTags.length > 0 && (
+              <button
+                onClick={() => updateFilters({ selectedTags: [] })}
+                className="text-xs text-blue-600 underline"
+              >
+                Zurücksetzen
+              </button>
+            )}
           </div>
           
           <div className="flex flex-wrap gap-2">

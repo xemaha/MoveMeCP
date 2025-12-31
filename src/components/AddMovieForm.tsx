@@ -56,6 +56,7 @@ export default function AddMovieForm() {
   // Typ-Auswahl: film | serie | buch
   const [contentType, setContentType] = useState<'film' | 'serie' | 'buch'>('film')
   const [rating, setRating] = useState<number>(0)
+  const [reviewText, setReviewText] = useState('')
   const [tags, setTags] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<MovieSuggestion[]>([])
@@ -341,7 +342,7 @@ export default function AddMovieForm() {
           // Update existing rating
           const { error: ratingUpdateError } = await supabase
             .from('ratings')
-            .update({ rating: rating, user_name: user?.name })
+            .update({ rating: rating, review_text: reviewText || null, user_name: user?.name })
             .eq('id', (existingRating as { id?: string })?.id ?? '');
           if (ratingUpdateError) {
             console.error('Rating update error:', ratingUpdateError);
@@ -355,6 +356,7 @@ export default function AddMovieForm() {
               {
                 movie_id: movieId,
                 rating: rating,
+                review_text: reviewText || null,
                 user_id: user?.id,
                 user_name: user?.name,
               },
@@ -524,6 +526,7 @@ export default function AddMovieForm() {
       setDescription('')
       setContentType('film')
       setRating(0)
+      setReviewText('')
       setTags('')
       setAddToWatchlist(false) // Reset watchlist checkbox
       setSelectedMovie(null)
@@ -736,6 +739,22 @@ export default function AddMovieForm() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Review Text */}
+        <div>
+          <label htmlFor="reviewText" className="block text-sm font-medium text-gray-700 mb-2">
+            Bewertungstext (optional)
+          </label>
+          <textarea
+            id="reviewText"
+            value={reviewText}
+            onChange={(e) => setReviewText(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Deine Gedanken zum Film, Serie oder Buch..."
+            rows={4}
+            disabled={isLoading}
+          />
         </div>
 
         {/* Watchlist/Readlist Checkbox */}
