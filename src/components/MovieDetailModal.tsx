@@ -281,7 +281,6 @@ export function MovieDetailModal({
           .select('rating, review_text, user_name')
           .eq('movie_id', movie.id)
           .neq('user_id', user.id)
-          .not('review_text', 'is', null)
           .order('created_at', { ascending: false });
 
         if (!error && data) {
@@ -770,11 +769,11 @@ export function MovieDetailModal({
                 ) : (
                   <div>
                     {userReviewText ? (
-                      <div className="p-3 bg-white rounded border border-blue-200">
+                      <div className="mt-2">
                         <p className="text-sm text-gray-700 whitespace-pre-wrap">{userReviewText}</p>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500 italic">Noch keine Textbewertung</p>
+                      <p className="text-sm text-gray-500 italic mt-2">Noch keine Textbewertung</p>
                     )}
                     <button
                       onClick={() => {
