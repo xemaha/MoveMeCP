@@ -5,6 +5,7 @@ import { Range } from 'react-range'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { useUser } from '@/lib/UserContext'
+import { generateRecommendations, findSimilarUsers } from '@/lib/recommendations'
 
 // Types
 interface Rating {
@@ -110,6 +111,9 @@ export function MovieList() {
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
   const [userSearchInput, setUserSearchInput] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [showRecommendations, setShowRecommendations] = useState(false)
+  const [recommendations, setRecommendations] = useState<any[]>([])
+  const [isCalculatingRecommendations, setIsCalculatingRecommendations] = useState(false)
 
   // Initialize data
   useEffect(() => {
@@ -597,6 +601,18 @@ export function MovieList() {
       }))
   }
 
+  const handleCalculateRecommendations = () => {
+    if (!user) return
+    
+    setIsCalculatingRecommendations(true)
+    
+    // Calculate recommendations
+    const recs = generateRecommendations(user.id, movies, 20)
+    setRecommendations(recs)
+    setShowRecommendations(true)
+    setIsCalculatingRecommendations(false)
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -617,31 +633,82 @@ export function MovieList() {
 
   return (
     <div className="space-y-6">
-      {/* View Mode Toggle */}
-      <div className="flex justify-center">
-        <div className="bg-gray-100 rounded-lg p-1 flex">
-          <button
-            onClick={() => setViewMode('movie-based')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'movie-based'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            📽️ Nach Items
-          </button>
-          <button
-            onClick={() => setViewMode('tag-based')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'tag-based'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            🏷️ Nach Tags
-          </button>
+      {/* Recommendations Section */}
+      {user && (
+        <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen für dich</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCalculateRecommendations}
+                disabled={isCalculatingRecommendations}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {isCalculatingRecommendations ? 'Berechne...' : showRecommendations ? '🔄 Neu berechnen' : '✨ Empfehlungen anzeigen'}
+              </button>
+              {showRecommendations && (
+                <button
+                  onClick={() => setShowRecommendations(false)}
+                  className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                  title="Empfehlungen ausblenden"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {showRecommendations && recommendations.length > 0 && (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Basierend auf Nutzern mit ähnlichem Geschmack wie du
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+                {recommendations.map((rec) => (
+                  <div
+                    key={rec.movie.id}
+                    onClick={() => setSelectedMovie(rec.movie)}
+                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer border-2 border-green-300"
+                  >
+                    {rec.movie.poster_url ? (
+                      <div className="w-full h-40 overflow-hidden">
+                        <img
+                          src={rec.movie.poster_url}
+                          alt={rec.movie.title}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                        🎬
+                      </div>
+                    )}
+                    <div className="p-3">
+                      <h4 className="font-semibold text-sm text-gray-900 truncate mb-1">
+                        {rec.movie.title}
+                      </h4>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-green-600 font-bold">
+                          ⭐ {rec.predictedRating.toFixed(1)}
+                        </span>
+                        <span className="text-gray-500 text-xs truncate">
+                          {rec.basedOnUsers.slice(0, 2).join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {showRecommendations && recommendations.length === 0 && (
+            <p className="text-sm text-gray-600 italic">
+              Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!
+            </p>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Filters */}
       <div className="space-y-4">
