@@ -95,9 +95,13 @@ export function MovieList() {
     contentTypes: {
       film: true,
       serie: true,
-      buch: true
+      buch: false
     }
   })
+  
+  // Separate rating range for personal ratings
+  const [myRatingMin, setMyRatingMin] = useState(0)
+  const [myRatingMax, setMyRatingMax] = useState(5)
   
   // UI state
   const [viewMode, setViewMode] = useState<'movie-based' | 'tag-based'>('movie-based')
@@ -493,29 +497,51 @@ export function MovieList() {
       }
     }
 
-    // Rating range filter
+    // Rating range filter - handle combinations of filters
     let matchesRatingRange = true
     
-    if (filters.userName) {
-      // Filter by specific selected user's ratings
-      const selectedUserRating = movie.ratings?.find(r => r.user_name === filters.userName)
-      if (selectedUserRating) {
-        matchesRatingRange = selectedUserRating.rating >= filters.minRating && 
-                           selectedUserRating.rating <= filters.maxRating
+    // Check personal rating filter ("Von mir bewertet")
+    let matchesMyRating = true
+    if (filters.userType === 'rated' && user) {
+      const userRating = movie.ratings?.find(r => r.user_id === user.id)
+      if (userRating) {
+        matchesMyRating = userRating.rating >= myRatingMin && 
+                         userRating.rating <= myRatingMax
       } else {
-        // User hasn't rated this movie
-        matchesRatingRange = filters.minRating === 0
-      }
-    } else {
-      // Filter by average rating of all users
-      if (movie.averageRating > 0) {
-        matchesRatingRange = movie.averageRating >= filters.minRating && 
-                           movie.averageRating <= filters.maxRating
-      } else {
-        // Movie has no ratings
-        matchesRatingRange = filters.minRating === 0
+        matchesMyRating = false
       }
     }
+    
+    // Check friend filter (Freunde Inspiration)
+    let matchesFriendRating = true
+    if (filters.userName) {
+      const selectedUserRating = movie.ratings?.find(r => r.user_name === filters.userName)
+      if (selectedUserRating) {
+        matchesFriendRating = selectedUserRating.rating >= filters.minRating && 
+                             selectedUserRating.rating <= filters.maxRating
+      } else {
+        // Friend hasn't rated this movie - exclude it
+        matchesFriendRating = false
+      }
+    } else {
+      // No specific friend selected - filter by average rating
+      if (movie.averageRating > 0) {
+        matchesFriendRating = movie.averageRating >= filters.minRating && 
+                             movie.averageRating <= filters.maxRating
+      } else {
+        matchesFriendRating = filters.minRating === 0
+      }
+    }
+    
+    // Combine filters: both must match if both are active
+    if (filters.userType === 'rated' && user) {
+      // Personal rating filter is active
+      matchesRatingRange = matchesMyRating && matchesFriendRating
+    } else if (filters.userName || filters.minRating > 0 || filters.maxRating < 5) {
+      // Friend filter is active (when friend selected OR rating range adjusted)
+      matchesRatingRange = matchesFriendRating
+    }
+    // Otherwise, no rating filter is active
 
     // Tag filter
     let matchesTagFilter = true
@@ -629,69 +655,180 @@ export function MovieList() {
         />
 
         {/* Content Type Filter */}
-        <div className="bg-green-50 p-4 rounded-lg">
+        <div className="p-4 rounded-lg">
           <h3 className="text-sm font-medium text-gray-700 mb-3">Content-Type</h3>
-          <div className="flex gap-4">
-            {Object.entries(filters.contentTypes).map(([type, checked]) => (
-              <label key={type} className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => updateFilters({
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(filters.contentTypes).map(([type, checked]) => {
+              const icons: Record<string, string> = {
+                film: '🎬 Filme',
+                serie: '📺 Serien',
+                buch: '📚 Bücher'
+              }
+              return (
+                <button
+                  key={type}
+                  onClick={() => updateFilters({
                     contentTypes: {
                       ...filters.contentTypes,
-                      [type]: e.target.checked
+                      [type]: !checked
                     }
                   })}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  {type === 'film' ? '🎬 Filme' : 
-                   type === 'serie' ? '📺 Serien' : 
-                   '📚 Bücher'}
-                </span>
-              </label>
-            ))}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    checked
+                      ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                >
+                  {icons[type]}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* User Filter */}
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Benutzer-Filter</h3>
-          
-          {user && (
-            <div className="mb-4">
-              <select
-                value={filters.userType}
-                onChange={(e) => updateFilters({
-                  userType: e.target.value as FilterSettings['userType'],
-                  userName: ''
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="all">🎬 Alle</option>
-                <option value="rated">⭐ Von mir bewertete</option>
-                <option value="unrated">☆ Von mir nicht bewertete</option>
-                <option value="watchlist">👁️ Meine Watchlist</option>
-              </select>
-            </div>
-          )}
-
-          <div className="mb-4">
-            <select
-              value={filters.userName}
-              onChange={(e) => updateFilters({ userName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="">Alle Benutzer</option>
-              {availableUsers.map(username => (
-                <option key={username} value={username}>{username}</option>
+        {/* Personal Filter - For Current User */}
+        {user && (
+          <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">📌 Meine Filter</h3>
+            <div className="flex flex-col gap-2">
+              {[
+                { value: 'all', label: '🎬 Alle Filme & Serien' },
+                { value: 'watchlist', label: '👁️ Meine Watchlist' },
+                { value: 'rated', label: '⭐ Von mir bewertet' },
+                { value: 'unrated', label: '☆ Noch nicht bewertet' }
+              ].map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => updateFilters({
+                    userType: option.value as FilterSettings['userType'],
+                    userName: ''
+                  })}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all text-left ${
+                    filters.userType === option.value
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
               ))}
-            </select>
+            </div>
+            
+            {/* Show rating range only when "Von mir bewertet" is selected */}
+            {filters.userType === 'rated' && (
+              <div className="mt-4 pt-4 border-t border-blue-300">
+                <label className="text-xs font-medium text-gray-700 block mb-2">
+                  Meine Bewertungen: {myRatingMin} - {myRatingMax} ⭐
+                </label>
+                <Range
+                  step={1}
+                  min={0}
+                  max={5}
+                  values={[myRatingMin, myRatingMax]}
+                  onChange={(values) => {
+                    setMyRatingMin(values[0])
+                    setMyRatingMax(values[1])
+                  }}
+                  renderTrack={({ props, children }: RangeTrackProps) => {
+                    const { key, ...restProps } = props
+                    return (
+                      <div
+                        key={key}
+                        {...restProps}
+                        className="h-2 w-full rounded bg-gray-200"
+                      >
+                        <div 
+                          className="h-2 rounded bg-blue-400"
+                          style={{
+                            position: 'absolute',
+                            left: `${(myRatingMin / 5) * 100}%`,
+                            width: `${((myRatingMax - myRatingMin) / 5) * 100}%`,
+                            top: 0,
+                            bottom: 0
+                          }}
+                        />
+                        {children}
+                      </div>
+                    )
+                  }}
+                  renderThumb={({ props, index }: RangeThumbProps) => {
+                    const { key, ...restProps } = props
+                    return (
+                      <div
+                        key={key}
+                        {...restProps}
+                        className="w-5 h-5 bg-blue-400 border-2 border-blue-600 rounded-full flex items-center justify-center shadow"
+                      >
+                        <span className="text-xs font-bold text-white">
+                          {[myRatingMin, myRatingMax][index]}
+                        </span>
+                      </div>
+                    )
+                  }}
+                />
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Rating Range */}
+        {/* Friends Filter - For Inspiration */}
+        <div className="p-4 rounded-lg border-2 border-purple-200 bg-purple-50">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">👯 Freunde Inspiration</h3>
+          <p className="text-xs text-gray-600 mb-3">Wähle eine Freundin aus, um ihre Bewertungen zu sehen</p>
+          
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Freundin suchen..."
+              value={filters.userName}
+              onChange={(e) => {
+                updateFilters({ userName: e.target.value })
+                setShowUserDropdown(true)
+              }}
+              onFocus={() => setShowUserDropdown(true)}
+              onBlur={() => setTimeout(() => setShowUserDropdown(false), 150)}
+              className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+            />
+            
+            {/* Autocomplete dropdown */}
+            {showUserDropdown && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-purple-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateFilters({ userName: '' })
+                    setShowUserDropdown(false)
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-purple-100 text-sm border-b border-purple-200"
+                >
+                  — Alle Benutzer —
+                </button>
+                {availableUsers
+                  .filter(username =>
+                    filters.userName === '' || username.toLowerCase().includes(filters.userName.toLowerCase())
+                  )
+                  .map(username => (
+                    <button
+                      key={username}
+                      type="button"
+                      onClick={() => {
+                        updateFilters({ userName: username })
+                        setShowUserDropdown(false)
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-purple-100 text-sm border-b border-purple-100 last:border-b-0"
+                    >
+                      {username}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Rating range always visible */}
           <div className="mt-4">
+            <label className="text-xs font-medium text-gray-700 block mb-2">
+              {filters.userName ? `Bewertungen von ${filters.userName}` : 'Durchschnittliche Bewertungen'}: {filters.minRating} - {filters.maxRating} ⭐
+            </label>
             <Range
               step={1}
               min={0}
@@ -707,10 +844,10 @@ export function MovieList() {
                   <div
                     key={key}
                     {...restProps}
-                    className="h-2 w-full rounded bg-gray-200 my-4"
+                    className="h-2 w-full rounded bg-gray-200"
                   >
                     <div 
-                      className="h-2 rounded bg-yellow-400"
+                      className="h-2 rounded bg-purple-400"
                       style={{
                         position: 'absolute',
                         left: `${(filters.minRating / 5) * 100}%`,
@@ -729,7 +866,7 @@ export function MovieList() {
                   <div
                     key={key}
                     {...restProps}
-                    className="w-5 h-5 bg-yellow-400 border-2 border-yellow-600 rounded-full flex items-center justify-center shadow"
+                    className="w-5 h-5 bg-purple-400 border-2 border-purple-600 rounded-full flex items-center justify-center shadow"
                   >
                     <span className="text-xs font-bold text-white">
                       {[filters.minRating, filters.maxRating][index]}
