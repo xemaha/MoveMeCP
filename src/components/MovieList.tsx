@@ -54,14 +54,10 @@ interface MovieListProps {
   }
   watchlistOnly?: boolean
   showPredictions?: boolean
-  providerFilter?: {
-    categories: {
-      flatrate: boolean
-      rent: boolean
-      buy: boolean
-      unavailable: boolean
-    }
-    providers: Set<number>
+  providerProfile?: {
+    flatrate: Set<number>
+    rent: Set<number>
+    buy: Set<number>
   }
 }
 
@@ -102,7 +98,7 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
 }
 
 export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerFilter } = props || {}
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile } = props || {}
   const { user } = useUser()
   
   // Core state
@@ -151,10 +147,10 @@ export function MovieList(props?: MovieListProps) {
     loadInitialData()
   }, [])
 
-  // Load watch providers for watchlist movies when providerFilter is active
+  // Load watch providers for watchlist movies when providerProfile is active
   useEffect(() => {
     const loadProvidersForMovies = async () => {
-      if (!watchlistOnly || !providerFilter || movieProviders.size > 0) return
+      if (!watchlistOnly || !providerProfile || movieProviders.size > 0) return
       if (movies.length === 0) return
       
       const watchlistMovieList = movies.filter(m => watchlistMovies.has(m.id))
@@ -192,10 +188,10 @@ export function MovieList(props?: MovieListProps) {
       setMovieProviders(providersMap)
     }
     
-    if (watchlistOnly && providerFilter && movies.length > 0) {
+    if (watchlistOnly && providerProfile && movies.length > 0) {
       loadProvidersForMovies()
     }
-  }, [watchlistOnly, providerFilter, movies, watchlistMovies])
+  }, [watchlistOnly, providerProfile, movies, watchlistMovies])
 
   useEffect(() => {
     loadWatchlist()
@@ -657,72 +653,53 @@ export function MovieList(props?: MovieListProps) {
     const typeFilter = contentTypeFilter || filters.contentTypes
     const matchesContentType = typeFilter[movie.content_type as keyof typeof typeFilter]
 
-    // Provider filter
+    // Provider profile filter - show only movies available on user's services
     let matchesProviderFilter = true
-    if (providerFilter && (providerFilter.providers.size > 0 || 
-        !providerFilter.categories.flatrate || 
-        !providerFilter.categories.rent || 
-        !providerFilter.categories.buy ||
-        !providerFilter.categories.unavailable)) {
+    if (providerProfile) {
+      const hasAnyProviderConfigured = 
+        providerProfile.flatrate.size > 0 || 
+        providerProfile.rent.size > 0 || 
+        providerProfile.buy.size > 0
       
-      const movieProviderData = movieProviders.get(movie.id)
-      
-      // Determine if movie has providers in any category
-      let hasProviders = false
-      let hasProvidersInSelectedCategories = false
-      
-      if (movieProviderData) {
-        const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
-        if (countryData) {
-          // Check if movie has any providers at all
-          const allProviders = [
-            ...(countryData.flatrate || []),
-            ...(countryData.rent || []),
-            ...(countryData.buy || [])
-          ]
-          hasProviders = allProviders.length > 0
+      if (hasAnyProviderConfigured) {
+        const movieProviderData = movieProviders.get(movie.id)
+        
+        if (!movieProviderData) {
+          // No provider data - can't watch it
+          matchesProviderFilter = false
+        } else {
+          const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
           
-          // Check if movie has providers in selected categories
-          const selectedCategoryProviders: any[] = []
-          if (providerFilter.categories.flatrate) {
-            selectedCategoryProviders.push(...(countryData.flatrate || []))
-          }
-          if (providerFilter.categories.rent) {
-            selectedCategoryProviders.push(...(countryData.rent || []))
-          }
-          if (providerFilter.categories.buy) {
-            selectedCategoryProviders.push(...(countryData.buy || []))
-          }
-          hasProvidersInSelectedCategories = selectedCategoryProviders.length > 0
-          
-          // If specific providers are selected, check if movie has them
-          if (providerFilter.providers.size > 0 && hasProvidersInSelectedCategories) {
-            matchesProviderFilter = selectedCategoryProviders.some(p => 
-              providerFilter.providers.has(p.provider_id)
-            )
-            return matchesProviderFilter // Early return for specific provider selection
+          if (!countryData) {
+            matchesProviderFilter = false
+          } else {
+            // Check if movie is available on any of user's configured services
+            let isAvailable = false
+            
+            // Check flatrate (streaming subscriptions)
+            if (providerProfile.flatrate.size > 0 && countryData.flatrate) {
+              isAvailable = countryData.flatrate.some((p: any) => 
+                providerProfile.flatrate.has(p.provider_id)
+              )
+            }
+            
+            // Check rent
+            if (!isAvailable && providerProfile.rent.size > 0 && countryData.rent) {
+              isAvailable = countryData.rent.some((p: any) => 
+                providerProfile.rent.has(p.provider_id)
+              )
+            }
+            
+            // Check buy
+            if (!isAvailable && providerProfile.buy.size > 0 && countryData.buy) {
+              isAvailable = countryData.buy.some((p: any) => 
+                providerProfile.buy.has(p.provider_id)
+              )
+            }
+            
+            matchesProviderFilter = isAvailable
           }
         }
-      }
-      
-      // Now apply category filter logic
-      const showAvailable = providerFilter.categories.flatrate || 
-                           providerFilter.categories.rent || 
-                           providerFilter.categories.buy
-      const showUnavailable = providerFilter.categories.unavailable
-      
-      if (showAvailable && showUnavailable) {
-        // Both selected - show all (with category filtering already applied above)
-        matchesProviderFilter = !hasProviders || hasProvidersInSelectedCategories
-      } else if (showAvailable && !showUnavailable) {
-        // Only available selected - must have providers in selected categories
-        matchesProviderFilter = hasProvidersInSelectedCategories
-      } else if (!showAvailable && showUnavailable) {
-        // Only unavailable selected - must NOT have providers
-        matchesProviderFilter = !hasProviders
-      } else {
-        // Nothing selected - show nothing
-        matchesProviderFilter = false
       }
     }
 

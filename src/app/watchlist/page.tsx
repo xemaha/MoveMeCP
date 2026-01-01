@@ -7,6 +7,7 @@ import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieList } from '@/components/MovieList'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { ProviderFilter } from '@/components/ProviderFilter'
+import { MyProvidersSetup } from '@/components/MyProvidersSetup'
 import { calculatePredictedRatings } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 
@@ -14,6 +15,12 @@ interface Provider {
   provider_id: number
   provider_name: string
   logo_path: string
+}
+
+interface UserProviderProfile {
+  flatrate: Set<number>
+  rent: Set<number>
+  buy: Set<number>
 }
 
 function WatchlistContent() {
@@ -25,14 +32,10 @@ function WatchlistContent() {
     buch: false
   })
   const hasCalcPredictions = useRef(false)
-  const [providerFilter, setProviderFilter] = useState({
-    categories: {
-      flatrate: true,
-      rent: true,
-      buy: true,
-      unavailable: true
-    },
-    providers: new Set<number>() // Empty = all selected
+  const [providerProfile, setProviderProfile] = useState<UserProviderProfile>({
+    flatrate: new Set(),
+    rent: new Set(),
+    buy: new Set()
   })
   const [availableProviders, setAvailableProviders] = useState<Provider[]>([])
   const [isLoadingProviders, setIsLoadingProviders] = useState(false)
@@ -180,11 +183,11 @@ function WatchlistContent() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
 
-        <ProviderFilter
+        <MyProvidersSetup
           availableProviders={availableProviders}
           isLoading={isLoadingProviders}
-          filter={providerFilter}
-          onChange={setProviderFilter}
+          profile={providerProfile}
+          onChange={setProviderProfile}
         />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -193,7 +196,7 @@ function WatchlistContent() {
             watchlistOnly 
             showPredictions={showPredictions} 
             contentTypeFilter={contentTypes}
-            providerFilter={providerFilter}
+            providerProfile={providerProfile}
           />
         </div>
       </main>
