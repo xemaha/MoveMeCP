@@ -666,36 +666,63 @@ export function MovieList(props?: MovieListProps) {
         !providerFilter.categories.unavailable)) {
       
       const movieProviderData = movieProviders.get(movie.id)
-      if (!movieProviderData) {
-        // No provider data available - only show if 'unavailable' is selected
-        matchesProviderFilter = providerFilter.categories.unavailable
-      } else {
+      
+      // Determine if movie has providers in any category
+      let hasProviders = false
+      let hasProvidersInSelectedCategories = false
+      
+      if (movieProviderData) {
         const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
-        if (!countryData) {
-          matchesProviderFilter = providerFilter.categories.unavailable
-        } else {
+        if (countryData) {
+          // Check if movie has any providers at all
+          const allProviders = [
+            ...(countryData.flatrate || []),
+            ...(countryData.rent || []),
+            ...(countryData.buy || [])
+          ]
+          hasProviders = allProviders.length > 0
+          
           // Check if movie has providers in selected categories
-          const availableProviders: any[] = []
+          const selectedCategoryProviders: any[] = []
           if (providerFilter.categories.flatrate) {
-            availableProviders.push(...(countryData.flatrate || []))
+            selectedCategoryProviders.push(...(countryData.flatrate || []))
           }
           if (providerFilter.categories.rent) {
-            availableProviders.push(...(countryData.rent || []))
+            selectedCategoryProviders.push(...(countryData.rent || []))
           }
           if (providerFilter.categories.buy) {
-            availableProviders.push(...(countryData.buy || []))
+            selectedCategoryProviders.push(...(countryData.buy || []))
           }
+          hasProvidersInSelectedCategories = selectedCategoryProviders.length > 0
           
-          if (availableProviders.length === 0) {
-            // Movie has no providers in selected categories - show if 'unavailable' is selected
-            matchesProviderFilter = providerFilter.categories.unavailable
-          } else if (providerFilter.providers.size > 0) {
-            // Check if movie has any of the selected providers
-            matchesProviderFilter = availableProviders.some(p => 
+          // If specific providers are selected, check if movie has them
+          if (providerFilter.providers.size > 0 && hasProvidersInSelectedCategories) {
+            matchesProviderFilter = selectedCategoryProviders.some(p => 
               providerFilter.providers.has(p.provider_id)
             )
+            return matchesProviderFilter // Early return for specific provider selection
           }
         }
+      }
+      
+      // Now apply category filter logic
+      const showAvailable = providerFilter.categories.flatrate || 
+                           providerFilter.categories.rent || 
+                           providerFilter.categories.buy
+      const showUnavailable = providerFilter.categories.unavailable
+      
+      if (showAvailable && showUnavailable) {
+        // Both selected - show all (with category filtering already applied above)
+        matchesProviderFilter = !hasProviders || hasProvidersInSelectedCategories
+      } else if (showAvailable && !showUnavailable) {
+        // Only available selected - must have providers in selected categories
+        matchesProviderFilter = hasProvidersInSelectedCategories
+      } else if (!showAvailable && showUnavailable) {
+        // Only unavailable selected - must NOT have providers
+        matchesProviderFilter = !hasProviders
+      } else {
+        // Nothing selected - show nothing
+        matchesProviderFilter = false
       }
     }
 
