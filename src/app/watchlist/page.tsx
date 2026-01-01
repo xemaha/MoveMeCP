@@ -66,25 +66,24 @@ function WatchlistContent() {
         const movieIds = watchlistData.map(w => w.movie_id)
         console.log('Total watchlist movies:', movieIds.length)
         
-        // Get movie details in batches to avoid URL length limits
-        const batchSize = 5  // Reduced batch size for UUIDs
+        // Load movies one by one to avoid URL length issues with .in()
         const allMovies: any[] = []
         
-        for (let i = 0; i < movieIds.length; i += batchSize) {
-          const batch = movieIds.slice(i, i + batchSize)
+        for (const movieId of movieIds) {
           try {
-            const { data: batchMovies, error } = await supabase
+            const { data: movie, error } = await supabase
               .from('movies')
               .select('id, title, tmdb_id, media_type')
-              .in('id', batch)
+              .eq('id', movieId)
+              .single()
             
             if (error) {
-              console.error('Batch query error:', error)
-            } else if (batchMovies) {
-              allMovies.push(...batchMovies)
+              console.error('Movie query error for', movieId, ':', error)
+            } else if (movie) {
+              allMovies.push(movie)
             }
           } catch (err) {
-            console.error('Batch query exception:', err)
+            console.error('Movie query exception for', movieId, ':', err)
           }
         }
         
