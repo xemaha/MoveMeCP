@@ -143,11 +143,58 @@ export function MovieList(props?: MovieListProps) {
   const [isCalculatingRecommendations, setIsCalculatingRecommendations] = useState(false)
   const [predictedRatings, setPredictedRatings] = useState<Map<string, number>>(new Map())
   const hasAutoCalcRecs = useRef(false)
+  const [movieProviders, setMovieProviders] = useState<Map<string, any>>(new Map()) // movieId -> provider data
 
   // Initialize data
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  // Load watch providers for watchlist movies when providerFilter is active
+  useEffect(() => {
+    const loadProvidersForMovies = async () => {
+      if (!watchlistOnly || !providerFilter || movieProviders.size > 0) return
+      if (movies.length === 0) return
+      
+      const watchlistMovieList = movies.filter(m => watchlistMovies.has(m.id))
+      if (watchlistMovieList.length === 0) return
+      
+      const { getWatchProviders, searchTMDb } = await import('@/lib/tmdbApi')
+      const providersMap = new Map<string, any>()
+      
+      await Promise.all(
+        watchlistMovieList.slice(0, 30).map(async (movie) => {
+          try {
+            let tmdbId = (movie as any).tmdb_id
+            let mediaType = (movie as any).media_type || 'movie'
+            
+            if (!tmdbId) {
+              const results = await searchTMDb(movie.title)
+              if (results && results.length > 0) {
+                tmdbId = results[0].id
+                mediaType = results[0].media_type || 'movie'
+              }
+            }
+            
+            if (tmdbId) {
+              const providers = await getWatchProviders(tmdbId, mediaType as 'movie' | 'tv')
+              if (providers && Object.keys(providers).length > 0) {
+                providersMap.set(movie.id, providers)
+              }
+            }
+          } catch (err) {
+            // Ignore errors for individual movies
+          }
+        })
+      )
+      
+      setMovieProviders(providersMap)
+    }
+    
+    if (watchlistOnly && providerFilter && movies.length > 0) {
+      loadProvidersForMovies()
+    }
+  }, [watchlistOnly, providerFilter, movies, watchlistMovies])
 
   useEffect(() => {
     loadWatchlist()
@@ -609,7 +656,47 @@ export function MovieList(props?: MovieListProps) {
     const typeFilter = contentTypeFilter || filters.contentTypes
     const matchesContentType = typeFilter[movie.content_type as keyof typeof typeFilter]
 
-    return matchesSearch && matchesUserTypeFilter && matchesRatingRange && matchesTagFilter && matchesContentType
+    // Provider filter
+    let matchesProviderFilter = true
+    if (providerFilter && (providerFilter.providers.size > 0 || 
+        !providerFilter.categories.flatrate || 
+        !providerFilter.categories.rent || 
+        !providerFilter.categories.buy)) {
+      
+      const movieProviderData = movieProviders.get(movie.id)
+      if (!movieProviderData) {
+        // No provider data available - exclude from filter
+        matchesProviderFilter = false
+      } else {
+        const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
+        if (!countryData) {
+          matchesProviderFilter = false
+        } else {
+          // Check if movie has providers in selected categories
+          const availableProviders: any[] = []
+          if (providerFilter.categories.flatrate) {
+            availableProviders.push(...(countryData.flatrate || []))
+          }
+          if (providerFilter.categories.rent) {
+            availableProviders.push(...(countryData.rent || []))
+          }
+          if (providerFilter.categories.buy) {
+            availableProviders.push(...(countryData.buy || []))
+          }
+          
+          if (availableProviders.length === 0) {
+            matchesProviderFilter = false
+          } else if (providerFilter.providers.size > 0) {
+            // Check if movie has any of the selected providers
+            matchesProviderFilter = availableProviders.some(p => 
+              providerFilter.providers.has(p.provider_id)
+            )
+          }
+        }
+      }
+    }
+
+    return matchesSearch && matchesUserTypeFilter && matchesRatingRange && matchesTagFilter && matchesContentType && matchesProviderFilter
   })
 
   // Helper functions
