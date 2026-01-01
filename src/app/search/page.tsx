@@ -6,7 +6,6 @@ import { UserHeader } from '@/components/UserHeader'
 import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieList } from '@/components/MovieList'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
-import { NavigationButtons } from '@/components/NavigationButtons'
 import { useState } from 'react'
 
 function SearchContent() {
@@ -35,15 +34,7 @@ function SearchContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <UserHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Search database 🔎</h1>
-            <p className="text-gray-600">Nutze Filter, Suche und Tags, um passende Titel zu finden.</p>
-          </div>
-          <NavigationButtons currentPage="search" />
-        </div>
-
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
