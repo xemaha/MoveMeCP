@@ -23,6 +23,141 @@ interface Recommendation {
   movie: Movie
   predictedRating: number
   basedOnUsers: string[]
+  tagBoost: number
+}
+
+/**
+ * Calculate user's tag preferences based on their ratings
+ * Returns a map of tag -> average rating for that tag
+ */
+function calculateTagPreferences(
+  currentUserId: string,
+  allMovies: Movie[]
+): Map<string, { avgRating: number; count: number }> {
+  const tagStats = new Map<string, { sum: number; count: number }>()
+
+  for (const movie of allMovies) {
+    const userRating = movie.ratings.find(r => r.user_id === currentUserId)
+    if (userRating && movie.tags) {
+      for (const tag of movie.tags) {
+        const tagName = tag.name
+        if (!tagStats.has(tagName)) {
+          tagStats.set(tagName, { sum: 0, count: 0 })
+        }
+        const stats = tagStats.get(tagName)!
+        stats.sum += userRating.rating
+        stats.count += 1
+      }
+    }
+  }
+
+  // Convert to average ratings
+  const preferences = new Map<string, { avgRating: number; count: number }>()
+  for (const [tagName, stats] of tagStats.entries()) {
+    if (stats.count >= 2) { // Need at least 2 movies with this tag
+      preferences.set(tagName, {
+        avgRating: stats.sum / stats.count,
+        count: stats.count
+      })
+    }
+  }
+
+  return preferences
+}
+
+/**
+ * Calculate user's director preferences based on their ratings
+ * Returns a map of director -> average rating for that director
+ */
+function calculateDirectorPreferences(
+  currentUserId: string,
+  allMovies: Movie[]
+): Map<string, { avgRating: number; count: number }> {
+  const directorStats = new Map<string, { sum: number; count: number }>()
+
+  for (const movie of allMovies) {
+    const userRating = movie.ratings.find(r => r.user_id === currentUserId)
+    if (userRating && movie.director && typeof movie.director === 'string' && movie.director.trim() !== '') {
+      const director = movie.director.trim()
+      if (!directorStats.has(director)) {
+        directorStats.set(director, { sum: 0, count: 0 })
+      }
+      const stats = directorStats.get(director)!
+      stats.sum += userRating.rating
+      stats.count += 1
+    }
+  }
+
+  // Convert to average ratings
+  const preferences = new Map<string, { avgRating: number; count: number }>()
+  for (const [director, stats] of directorStats.entries()) {
+    if (stats.count >= 1) { // Need at least 1 movie from this director
+      preferences.set(director, {
+        avgRating: stats.sum / stats.count,
+        count: stats.count
+      })
+    }
+  }
+
+  return preferences
+}
+
+/**
+ * Calculate director boost for a movie based on user's director preferences
+ * Returns a value between 0 and 1
+ */
+function calculateDirectorBoost(
+  movie: Movie,
+  directorPreferences: Map<string, { avgRating: number; count: number }>
+): number {
+  if (!movie.director || typeof movie.director !== 'string' || movie.director.trim() === '') {
+    return 0
+  }
+
+  const director = movie.director.trim()
+  const pref = directorPreferences.get(director)
+  
+  if (!pref) {
+    return 0
+  }
+
+  // Normalize to 0-1 scale (rating 3-5 maps to 0-1)
+  const normalizedRating = Math.max(0, (pref.avgRating - 3) / 2)
+  
+  return normalizedRating
+}
+
+/**
+ * Calculate tag boost for a movie based on user's tag preferences
+ * Returns a value between 0 and 1
+ */
+function calculateTagBoost(
+  movie: Movie,
+  tagPreferences: Map<string, { avgRating: number; count: number }>
+): number {
+  if (!movie.tags || movie.tags.length === 0) {
+    return 0
+  }
+
+  let totalBoost = 0
+  let matchingTags = 0
+
+  for (const tag of movie.tags) {
+    const pref = tagPreferences.get(tag.name)
+    if (pref) {
+      // Normalize to 0-1 scale (rating 3-5 maps to 0-1)
+      const normalizedRating = Math.max(0, (pref.avgRating - 3) / 2)
+      totalBoost += normalizedRating
+      matchingTags++
+    }
+  }
+
+  if (matchingTags === 0) {
+    return 0
+  }
+
+  // Average boost across matching tags
+  return totalBoost / matchingTags
 }
 
 /**
@@ -84,7 +219,7 @@ function calculatePearsonCorrelation(
 export function findSimilarUsers(
   currentUserId: string,
   allMovies: Movie[],
-  minCommonMovies: number = 3
+  minCommonMovies: number = 2
 ): UserSimilarity[] {
   // Build rating maps for all users
   const userRatings = new Map<string, Map<string, number>>()
@@ -140,7 +275,7 @@ export function findSimilarUsers(
 }
 
 /**
- * Generate movie recommendations for a user based on similar users
+ * Generate movie recommendations for a user based on similar users AND tag preferences
  */
 export function generateRecommendations(
   currentUserId: string,
@@ -153,6 +288,12 @@ export function generateRecommendations(
   if (similarUsers.length === 0) {
     return []
   }
+
+  // Calculate user's tag preferences
+  const tagPreferences = calculateTagPreferences(currentUserId, allMovies)
+
+  // Calculate user's director preferences
+  const directorPreferences = calculateDirectorPreferences(currentUserId, allMovies)
 
   // Get movies current user has already rated
   const ratedMovieIds = new Set<string>()
@@ -169,7 +310,7 @@ export function generateRecommendations(
     // Skip if already rated
     if (ratedMovieIds.has(movie.id)) continue
 
-    // Calculate weighted average rating from similar users
+    // Calculate weighted average rating from similar users (Collaborative Filtering)
     let weightedSum = 0
     let weightSum = 0
     const contributingUsers: string[] = []
@@ -185,14 +326,37 @@ export function generateRecommendations(
 
     // Need at least one similar user to have rated it
     if (weightSum > 0 && contributingUsers.length > 0) {
-      const predictedRating = weightedSum / weightSum
+      const collaborativeRating = weightedSum / weightSum
 
-      // Only recommend movies with predicted rating >= 3.5
-      if (predictedRating >= 3.5) {
+      // Calculate tag boost (Content-based Filtering)
+      const tagBoost = calculateTagBoost(movie, tagPreferences)
+
+      // Calculate director boost (Content-based Filtering)
+      const directorBoost = calculateDirectorBoost(movie, directorPreferences)
+
+      // Combine collaborative and content-based scores
+      // Base weights: 60% collaborative, 20% tags, 20% director.
+      // If a boost is unavailable (0), its weight shifts to collaborative so we never block recommendations.
+      const baseCollabWeight = 0.6
+      const tagWeight = 0.2
+      const directorWeight = 0.2
+      let collabWeight = baseCollabWeight
+
+      if (tagBoost === 0) collabWeight += tagWeight
+      if (directorBoost === 0) collabWeight += directorWeight
+
+      const finalRating =
+        collaborativeRating * collabWeight +
+        collaborativeRating * tagBoost * tagWeight +
+        collaborativeRating * directorBoost * directorWeight
+
+      // Only recommend movies with final rating >= 3.5
+      if (finalRating >= 3.5) {
         predictions.push({
           movie,
-          predictedRating,
-          basedOnUsers: contributingUsers.slice(0, 3) // Top 3 contributors
+          predictedRating: finalRating,
+          basedOnUsers: contributingUsers.slice(0, 3), // Top 3 contributors
+          tagBoost
         })
       }
     }
@@ -202,4 +366,72 @@ export function generateRecommendations(
   predictions.sort((a, b) => b.predictedRating - a.predictedRating)
 
   return predictions.slice(0, maxRecommendations)
+}
+
+/**
+ * Calculate predicted ratings for ALL movies (including already rated)
+ * This is used to show predicted match percentage on all movie cards
+ */
+export function calculatePredictedRatings(
+  currentUserId: string,
+  allMovies: Movie[]
+): Map<string, number> {
+  const predictedRatings = new Map<string, number>()
+
+  // Find similar users
+  const similarUsers = findSimilarUsers(currentUserId, allMovies)
+
+  if (similarUsers.length === 0) {
+    return predictedRatings
+  }
+
+  // Calculate user's tag preferences
+  const tagPreferences = calculateTagPreferences(currentUserId, allMovies)
+
+  // Calculate user's director preferences
+  const directorPreferences = calculateDirectorPreferences(currentUserId, allMovies)
+
+  // Calculate predicted ratings for all movies
+  for (const movie of allMovies) {
+    // Calculate weighted average rating from similar users (Collaborative Filtering)
+    let weightedSum = 0
+    let weightSum = 0
+
+    for (const similarUser of similarUsers) {
+      const rating = movie.ratings.find(r => r.user_name === similarUser.userName)
+      if (rating) {
+        weightedSum += rating.rating * similarUser.similarity
+        weightSum += similarUser.similarity
+      }
+    }
+
+    // Need at least one similar user to have rated it
+    if (weightSum > 0) {
+      const collaborativeRating = weightedSum / weightSum
+
+      // Calculate tag boost (Content-based Filtering)
+      const tagBoost = calculateTagBoost(movie, tagPreferences)
+
+      // Calculate director boost (Content-based Filtering)
+      const directorBoost = calculateDirectorBoost(movie, directorPreferences)
+
+      // Combine collaborative and content-based scores (same dynamic weighting as generateRecommendations)
+      const baseCollabWeight = 0.6
+      const tagWeight = 0.2
+      const directorWeight = 0.2
+      let collabWeight = baseCollabWeight
+
+      if (tagBoost === 0) collabWeight += tagWeight
+      if (directorBoost === 0) collabWeight += directorWeight
+
+      const finalRating =
+        collaborativeRating * collabWeight +
+        collaborativeRating * tagBoost * tagWeight +
+        collaborativeRating * directorBoost * directorWeight
+
+      predictedRatings.set(movie.id, finalRating)
+    }
+  }
+
+  return predictedRatings
 }

@@ -5,7 +5,7 @@ import { Range } from 'react-range'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { useUser } from '@/lib/UserContext'
-import { generateRecommendations, findSimilarUsers } from '@/lib/recommendations'
+import { generateRecommendations, findSimilarUsers, calculatePredictedRatings } from '@/lib/recommendations'
 
 // Types
 interface Rating {
@@ -21,6 +21,7 @@ interface EnhancedMovie extends Movie {
   ratings: Rating[]
   actor?: string
   director?: string
+  predictedRating?: number
 }
 
 interface FilterSettings {
@@ -48,22 +49,25 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
   if (!tags?.length) return null
   
   const sortedTags = [...tags].sort((a, b) => a.name.localeCompare(b.name))
-  const visibleTags = expanded ? sortedTags : sortedTags.slice(0, 20)
-  
+  const visibleTags = expanded ? sortedTags : sortedTags.slice(0, 8)
+  const hasMore = sortedTags.length > visibleTags.length
+
   return (
-    <div className="flex flex-wrap gap-1 mb-2">
+    <div className="flex flex-wrap gap-2 mt-2">
       {visibleTags.map((tag) => (
         <span
           key={tag.id}
-          className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-          style={{ backgroundColor: tag.color }}
+          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+          style={{
+            backgroundColor: tag.color + '20',
+            color: tag.color
+          }}
         >
           {tag.name}
         </span>
       ))}
-      {tags.length > 20 && (
+      {hasMore && (
         <button
-          type="button"
           className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
           onClick={() => setExpanded(!expanded)}
         >
@@ -114,6 +118,7 @@ export function MovieList() {
   const [showRecommendations, setShowRecommendations] = useState(false)
   const [recommendations, setRecommendations] = useState<any[]>([])
   const [isCalculatingRecommendations, setIsCalculatingRecommendations] = useState(false)
+  const [predictedRatings, setPredictedRatings] = useState<Map<string, number>>(new Map())
 
   // Initialize data
   useEffect(() => {
@@ -609,6 +614,11 @@ export function MovieList() {
     // Calculate recommendations
     const recs = generateRecommendations(user.id, movies, 20)
     setRecommendations(recs)
+    
+    // Calculate predicted ratings for all movies
+    const predictions = calculatePredictedRatings(user.id, movies)
+    setPredictedRatings(predictions)
+    
     setShowRecommendations(true)
     setIsCalculatingRecommendations(false)
   }
@@ -664,40 +674,68 @@ export function MovieList() {
                 Basierend auf Nutzern mit ähnlichem Geschmack wie du
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                {recommendations.map((rec) => (
-                  <div
-                    key={rec.movie.id}
-                    onClick={() => setSelectedMovie(rec.movie)}
-                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer border-2 border-green-300"
-                  >
-                    {rec.movie.poster_url ? (
-                      <div className="w-full h-40 overflow-hidden">
-                        <img
-                          src={rec.movie.poster_url}
-                          alt={rec.movie.title}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform"
-                        />
+                {recommendations
+                  .filter(rec => {
+                    const contentType = rec.movie.content_type?.toLowerCase()
+                    if (contentType === 'film') return filters.contentTypes.film
+                    if (contentType === 'serie') return filters.contentTypes.serie
+                    if (contentType === 'buch') return filters.contentTypes.buch
+                    return true
+                  })
+                  .map((rec) => (
+                    <div
+                      key={rec.movie.id}
+                      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-green-300"
+                    >
+                      <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
+                        {rec.movie.poster_url ? (
+                          <div className="w-full h-40 overflow-hidden">
+                            <img
+                              src={rec.movie.poster_url}
+                              alt={rec.movie.title}
+                              className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                            🎬
+                          </div>
+                        )}
+                        <div className="p-3">
+                          <h4 className="font-semibold text-sm text-gray-900 truncate mb-2">
+                            {rec.movie.title}
+                          </h4>
+                          <div className="flex flex-col gap-1">
+                            <div className="text-center">
+                              <div className="text-green-700 font-bold text-lg mb-1">
+                                {Math.round((rec.predictedRating / 5) * 100)}% Match
+                              </div>
+                              <div className="flex items-center justify-center text-xs text-gray-600">
+                                <span className="text-yellow-400 mr-1">★</span>
+                                <span>Ø {rec.movie.averageRating.toFixed(1)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
-                        🎬
-                      </div>
-                    )}
-                    <div className="p-3">
-                      <h4 className="font-semibold text-sm text-gray-900 truncate mb-1">
-                        {rec.movie.title}
-                      </h4>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-green-600 font-bold">
-                          ⭐ {rec.predictedRating.toFixed(1)}
-                        </span>
-                        <span className="text-gray-500 text-xs truncate">
-                          {rec.basedOnUsers.slice(0, 2).join(', ')}
-                        </span>
+                      <div className="px-3 pb-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleWatchlistToggle(rec.movie.id)
+                          }}
+                          className={`w-full mt-2 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                            watchlistMovies.has(rec.movie.id)
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                          }`}
+                        >
+                          <span>{watchlistMovies.has(rec.movie.id) ? '👁️' : '👁️‍🗨️'}</span>
+                          <span>{watchlistMovies.has(rec.movie.id) ? 'Auf Watchlist' : 'Zur Watchlist'}</span>
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           )}
@@ -1097,9 +1135,16 @@ export function MovieList() {
               {/* User actions */}
               {user && (
                 <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">
-                    Deine Bewertung:
-                  </h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-700">
+                      Deine Bewertung:
+                    </h4>
+                    {predictedRatings.has(movie.id) && (
+                      <span className="text-green-600 font-semibold text-sm">
+                        {Math.round((predictedRatings.get(movie.id)! / 5) * 100)}% Match
+                      </span>
+                    )}
+                  </div>
                   
                   {/* Star rating */}
                   <div className="flex items-center mb-3">
