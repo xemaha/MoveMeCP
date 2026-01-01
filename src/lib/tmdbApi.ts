@@ -42,3 +42,19 @@ export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' =
   }
   return { ...data, trailerUrl, director, actors };
 }
+
+export async function getWatchProviders(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie') {
+  try {
+    const url = `${TMDB_BASE_URL}/${mediaType}/${tmdbId}/watch/providers?api_key=${TMDB_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Watch providers fetch failed');
+    const data = await res.json();
+    
+    // Rückgabe der Anbieter für verschiedene Länder (DE, US, etc.)
+    return data.results || {};
+  } catch (err) {
+    console.error('Error fetching watch providers:', err);
+    return {};
+  }
+}
+

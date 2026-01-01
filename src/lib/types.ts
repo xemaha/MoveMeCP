@@ -32,6 +32,18 @@ export interface Movie {
   actor?: string
   director?: string
   trailer_url?: string
+  watch_providers?: {
+    [country: string]: {
+      results: Array<{
+        provider_id: number
+        provider_name: string
+        logo_path: string
+      }>
+      link?: string
+    }
+  }
+  tmdb_id?: number
+  media_type?: string
 }
 
 export interface Rating {

@@ -322,6 +322,8 @@ export default function AddMovieForm({ selectedContentType }: AddMovieFormProps)
               year: year ? Number(year) : null,
               genre: genre || null,
               trailer_url: trailerUrl || null,
+              tmdb_id: (selectedMovie as any)?.id || null,
+              media_type: (selectedMovie as any)?.media_type || null,
             },
           ])
           .select()

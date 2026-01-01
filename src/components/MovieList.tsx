@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Range } from 'react-range'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
+import { WatchProvidersDisplay } from '@/components/WatchProvidersDisplay'
 import { useUser } from '@/lib/UserContext'
 import { generateRecommendations, findSimilarUsers, calculatePredictedRatings } from '@/lib/recommendations'
 
@@ -1148,6 +1149,13 @@ export function MovieList(props?: MovieListProps) {
                       >
                         🎬 Trailer ansehen
                       </a>
+                    </div>
+                  )}
+
+                  {/* Watch Providers */}
+                  {movie.watch_providers && (
+                    <div className="mb-3">
+                      <WatchProvidersDisplay movie={movie} size="small" />
                     </div>
                   )}
 

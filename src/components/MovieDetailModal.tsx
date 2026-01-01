@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase, Movie, Tag } from "@/lib/supabase";
 import { useUser } from "@/lib/UserContext";
+import { WatchProvidersDisplay } from "./WatchProvidersDisplay";
 
 interface MovieWithDetails extends Movie {
   tags: Tag[];
@@ -16,6 +17,8 @@ interface MovieWithDetails extends Movie {
   actor?: string;
   director?: string;
   trailer_url?: string;
+  tmdb_id?: number;
+  media_type?: string;
 }
 
 interface MovieDetailModalProps {
@@ -58,6 +61,8 @@ export function MovieDetailModal({
   };
 
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({});
+  const [watchProviders, setWatchProviders] = useState<any>(null);
+
   useEffect(() => {
     const fetchTagUsage = async () => {
       const { data, error } = await supabase
@@ -76,6 +81,22 @@ export function MovieDetailModal({
     };
     fetchTagUsage();
   }, [isOpen]);
+
+  // Fetch watch providers when modal opens
+  useEffect(() => {
+    if (isOpen && movie && movie.tmdb_id && movie.media_type) {
+      const fetchWatchProviders = async () => {
+        try {
+          const { getWatchProviders } = await import('@/lib/tmdbApi');
+          const providers = await getWatchProviders(movie.tmdb_id as number, (movie.media_type as 'movie' | 'tv') || 'movie');
+          setWatchProviders(providers);
+        } catch (err) {
+          console.error('Error fetching watch providers:', err);
+        }
+      };
+      fetchWatchProviders();
+    }
+  }, [isOpen, movie]);
 
   const topTags = [...allTags]
     .sort((a, b) => (tagUsageCount[b.name] || 0) - (tagUsageCount[a.name] || 0))
@@ -528,6 +549,14 @@ export function MovieDetailModal({
                 </a>
               </div>
             )}
+            
+            {/* Watch Providers */}
+            {watchProviders && (
+              <div className="flex justify-center mb-4">
+                <WatchProvidersDisplay movie={{ ...movie, watch_providers: watchProviders }} size="large" />
+              </div>
+            )}
+            
             {/* Director */}
             {editedMovie.director && (
               <div className="text-base text-gray-700"><span className="font-semibold">Director:</span> {editedMovie.director}</div>
