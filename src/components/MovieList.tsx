@@ -59,6 +59,12 @@ interface MovieListProps {
     rent: Set<number>
     buy: Set<number>
   }
+  providerTypeFilter?: {
+    flatrate: boolean
+    rent: boolean
+    buy: boolean
+    unavailable: boolean
+  }
 }
 
 // Tag display component
@@ -98,7 +104,7 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
 }
 
 export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile } = props || {}
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile, providerTypeFilter } = props || {}
   const { user } = useUser()
   
   // Core state
@@ -653,7 +659,7 @@ export function MovieList(props?: MovieListProps) {
     const typeFilter = contentTypeFilter || filters.contentTypes
     const matchesContentType = typeFilter[movie.content_type as keyof typeof typeFilter]
 
-    // Provider profile filter - show only movies available on user's services
+    // Provider profile filter with type filtering
     let matchesProviderFilter = true
     if (providerProfile) {
       const hasAnyProviderConfigured = 
@@ -666,38 +672,66 @@ export function MovieList(props?: MovieListProps) {
         
         if (!movieProviderData) {
           // No provider data - can't watch it
-          matchesProviderFilter = false
+          if (!providerTypeFilter?.unavailable) {
+            matchesProviderFilter = false
+          }
         } else {
           const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
           
           if (!countryData) {
-            matchesProviderFilter = false
+            if (!providerTypeFilter?.unavailable) {
+              matchesProviderFilter = false
+            }
           } else {
-            // Check if movie is available on any of user's configured services
-            let isAvailable = false
+            // Check which categories this movie is available in for user's services
+            let availableCategories = {
+              flatrate: false,
+              rent: false,
+              buy: false
+            }
             
             // Check flatrate (streaming subscriptions)
             if (providerProfile.flatrate.size > 0 && countryData.flatrate) {
-              isAvailable = countryData.flatrate.some((p: any) => 
+              availableCategories.flatrate = countryData.flatrate.some((p: any) => 
                 providerProfile.flatrate.has(p.provider_id)
               )
             }
             
             // Check rent
-            if (!isAvailable && providerProfile.rent.size > 0 && countryData.rent) {
-              isAvailable = countryData.rent.some((p: any) => 
+            if (providerProfile.rent.size > 0 && countryData.rent) {
+              availableCategories.rent = countryData.rent.some((p: any) => 
                 providerProfile.rent.has(p.provider_id)
               )
             }
             
             // Check buy
-            if (!isAvailable && providerProfile.buy.size > 0 && countryData.buy) {
-              isAvailable = countryData.buy.some((p: any) => 
+            if (providerProfile.buy.size > 0 && countryData.buy) {
+              availableCategories.buy = countryData.buy.some((p: any) => 
                 providerProfile.buy.has(p.provider_id)
               )
             }
             
-            matchesProviderFilter = isAvailable
+            // Check if movie passes the type filter
+            const isAvailable = availableCategories.flatrate || availableCategories.rent || availableCategories.buy
+            
+            // Apply provider type filter if it exists
+            if (providerTypeFilter) {
+              // If movie is unavailable on user's services
+              if (!isAvailable) {
+                matchesProviderFilter = providerTypeFilter.unavailable
+              } else {
+                // Movie is available - check if any selected type matches
+                const selectedTypes = {
+                  flatrate: providerTypeFilter.flatrate && availableCategories.flatrate,
+                  rent: providerTypeFilter.rent && availableCategories.rent,
+                  buy: providerTypeFilter.buy && availableCategories.buy
+                }
+                matchesProviderFilter = selectedTypes.flatrate || selectedTypes.rent || selectedTypes.buy
+              }
+            } else {
+              // No type filter applied, just check if available
+              matchesProviderFilter = isAvailable
+            }
           }
         }
       }

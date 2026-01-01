@@ -7,6 +7,7 @@ import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieList } from '@/components/MovieList'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { ProviderFilter } from '@/components/ProviderFilter'
+import { ProviderTypeFilter } from '@/components/ProviderTypeFilter'
 import { MyProvidersSetup } from '@/components/MyProvidersSetup'
 import { calculatePredictedRatings } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
@@ -37,130 +38,38 @@ function WatchlistContent() {
     rent: new Set(),
     buy: new Set()
   })
+  const [providerTypeFilter, setProviderTypeFilter] = useState({
+    flatrate: true,
+    rent: true,
+    buy: true,
+    unavailable: true
+  })
   const [availableProviders, setAvailableProviders] = useState<Provider[]>([])
   const [isLoadingProviders, setIsLoadingProviders] = useState(false)
 
+  // Common streaming providers in Germany
+  const commonProviders: Provider[] = [
+    { provider_id: 8, provider_name: 'Netflix', logo_path: '/t2yyOv40HZeVlLjYsCsPHnWLk4W.jpg' },
+    { provider_id: 9, provider_name: 'Amazon Prime Video', logo_path: '/emthp39XA2YScoYL1p0sdbAH2WA.jpg' },
+    { provider_id: 337, provider_name: 'Disney Plus', logo_path: '/7rwgEs15tFwyR9NPQ5vpzxTj19Q.jpg' },
+    { provider_id: 350, provider_name: 'Apple TV Plus', logo_path: '/6uhKBfmtzFqOcLousHwZuzcrScK.jpg' },
+    { provider_id: 119, provider_name: 'Amazon Prime Video', logo_path: '/emthp39XA2YScoYL1p0sdbAH2WA.jpg' },
+    { provider_id: 2, provider_name: 'Apple TV', logo_path: '/peURlLlr8jggOwK53fJ5wdQl05y.jpg' },
+    { provider_id: 3, provider_name: 'Google Play Movies', logo_path: '/tbEdFQDwx5LEVr8WpSeXQSIirVq.jpg' },
+    { provider_id: 10, provider_name: 'Amazon Video', logo_path: '/emthp39XA2YScoYL1p0sdbAH2WA.jpg' },
+    { provider_id: 192, provider_name: 'YouTube', logo_path: '/cQ8QBHQHBojTov3PQiyFE78KXQA.jpg' },
+    { provider_id: 68, provider_name: 'Microsoft Store', logo_path: '/shq88b09gTBYC4hA7K7MUL8Q4zP.jpg' },
+    { provider_id: 29, provider_name: 'Sky Store', logo_path: '/2PmNUOCJrN7FHPPGTPKGq5xGlMp.jpg' },
+    { provider_id: 130, provider_name: 'Sky Go', logo_path: '/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg' },
+    { provider_id: 207, provider_name: 'Sky X', logo_path: '/8z7rC8uIDaTM91X0ZfkRf04ydj2.jpg' },
+    { provider_id: 1899, provider_name: 'Max', logo_path: '/zxrVdFjIjLqkfnwyghnfywTn3Lh.jpg' },
+    { provider_id: 531, provider_name: 'Paramount Plus', logo_path: '/xbhHHa1YgtpwhC8lb1NQ3ACVcLd.jpg' }
+  ]
+
   useEffect(() => {
-    // Auto-calculate predictions when watchlist loads
-    if (!hasCalcPredictions.current && user) {
-      setShowPredictions(true)
-      hasCalcPredictions.current = true
-    }
-  }, [user])
-
-  // Load watch providers for watchlist movies
-  useEffect(() => {
-    const loadWatchlistProviders = async () => {
-      if (!user) return
-      
-      setIsLoadingProviders(true)
-      try {
-        // Get watchlist movies
-        const { data: watchlistData } = await supabase
-          .from('watchlist')
-          .select('movie_id')
-          .eq('user_id', user.id)
-        
-        if (!watchlistData || watchlistData.length === 0) {
-          setIsLoadingProviders(false)
-          return
-        }
-
-        const movieIds = watchlistData.map(w => w.movie_id)
-        console.log('Total watchlist movies:', movieIds.length)
-        
-        // Load movies one by one to avoid URL length issues with .in()
-        const allMovies: any[] = []
-        
-        for (const movieId of movieIds) {
-          try {
-            const { data: movie, error } = await supabase
-              .from('movies')
-              .select('id, title, tmdb_id, media_type')
-              .eq('id', movieId)
-              .single()
-            
-            if (error) {
-              console.error('Movie query error for', movieId, ':', error)
-            } else if (movie) {
-              allMovies.push(movie)
-            }
-          } catch (err) {
-            console.error('Movie query exception for', movieId, ':', err)
-          }
-        }
-        
-        console.log('Loaded movies:', allMovies.length)
-        
-        if (allMovies.length === 0) {
-          setIsLoadingProviders(false)
-          return
-        }
-
-        // Load providers from TMDB
-        const { getWatchProviders, searchTMDb } = await import('@/lib/tmdbApi')
-        const providersMap = new Map<number, Provider>()
-        
-        console.log('Loading providers for', allMovies.length, 'movies')
-        
-        await Promise.all(
-          allMovies.slice(0, 20).map(async (movie: any) => {
-            try {
-              let tmdbId = movie.tmdb_id
-              let mediaType = movie.media_type || 'movie'
-              
-              if (!tmdbId) {
-                const results = await searchTMDb(movie.title)
-                if (results && results.length > 0) {
-                  tmdbId = results[0].id
-                  mediaType = results[0].media_type || 'movie'
-                }
-              }
-              
-              if (tmdbId) {
-                const providers = await getWatchProviders(tmdbId, mediaType as 'movie' | 'tv')
-                const countryData = providers?.DE || Object.values(providers || {})[0] as any
-                
-                if (countryData) {
-                  const allProviders = [
-                    ...(countryData.flatrate || []),
-                    ...(countryData.rent || []),
-                    ...(countryData.buy || [])
-                  ]
-                  
-                  allProviders.forEach((provider: any) => {
-                    if (!providersMap.has(provider.provider_id)) {
-                      providersMap.set(provider.provider_id, {
-                        provider_id: provider.provider_id,
-                        provider_name: provider.provider_name,
-                        logo_path: provider.logo_path
-                      })
-                    }
-                  })
-                }
-              }
-            } catch (err) {
-              // Ignore errors for individual movies
-            }
-          })
-        )
-        
-        const providersList = Array.from(providersMap.values())
-          .sort((a, b) => a.provider_name.localeCompare(b.provider_name))
-        
-        console.log('Loaded providers:', providersList.length, providersList)
-        setAvailableProviders(providersList)
-      } catch (err) {
-        console.error('Error loading providers:', err)
-      } finally {
-        setIsLoadingProviders(false)
-      }
-    }
-    
-    if (user) {
-      loadWatchlistProviders()
-    }
-  }, [user])
+    // Use common providers as default
+    setAvailableProviders(commonProviders)
+  }, [])
 
   if (isLoading) {
     return (
@@ -190,6 +99,14 @@ function WatchlistContent() {
           onChange={setProviderProfile}
         />
 
+        {(providerProfile.flatrate.size > 0 || providerProfile.rent.size > 0 || providerProfile.buy.size > 0) && (
+          <ProviderTypeFilter
+            selectedTypes={providerTypeFilter}
+            onChange={setProviderTypeFilter}
+            hasPersonalProviders={true}
+          />
+        )}
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <MovieList 
             hideRecommendations 
@@ -197,6 +114,7 @@ function WatchlistContent() {
             showPredictions={showPredictions} 
             contentTypeFilter={contentTypes}
             providerProfile={providerProfile}
+            providerTypeFilter={providerTypeFilter}
           />
         </div>
       </main>
