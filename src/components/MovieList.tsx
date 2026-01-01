@@ -1152,12 +1152,8 @@ export function MovieList(props?: MovieListProps) {
                     </div>
                   )}
 
-                  {/* Watch Providers */}
-                  {movie.watch_providers && (
-                    <div className="mb-3">
-                      <WatchProvidersDisplay movie={movie} size="small" />
-                    </div>
-                  )}
+                  {/* Watch Providers - Note: Will be shown in detail modal */}
+                  {/* Click the card to see watch provider information in the detail view */}
 
                   {/* Tags */}
                   {movie.tags.length > 0 && (

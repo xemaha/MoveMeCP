@@ -84,16 +84,35 @@ export function MovieDetailModal({
 
   // Fetch watch providers when modal opens
   useEffect(() => {
-    if (isOpen && movie && movie.tmdb_id && movie.media_type) {
-      const fetchWatchProviders = async () => {
-        try {
-          const { getWatchProviders } = await import('@/lib/tmdbApi');
-          const providers = await getWatchProviders(movie.tmdb_id as number, (movie.media_type as 'movie' | 'tv') || 'movie');
-          setWatchProviders(providers);
-        } catch (err) {
-          console.error('Error fetching watch providers:', err);
+    const fetchWatchProviders = async () => {
+      try {
+        const { getWatchProviders, searchTMDb } = await import('@/lib/tmdbApi');
+        let tmdbId = movie.tmdb_id;
+        let mediaType = movie.media_type || 'movie';
+
+        // Falls tmdb_id nicht vorhanden, versuche via Titel zu suchen
+        if (!tmdbId) {
+          try {
+            const results = await searchTMDb(movie.title);
+            if (results && results.length > 0) {
+              tmdbId = results[0].id;
+              mediaType = results[0].media_type || 'movie';
+            }
+          } catch (searchErr) {
+            console.warn('Could not search TMDB for watch providers:', searchErr);
+          }
         }
-      };
+
+        if (tmdbId && mediaType) {
+          const providers = await getWatchProviders(tmdbId as number, mediaType as 'movie' | 'tv');
+          setWatchProviders(providers);
+        }
+      } catch (err) {
+        console.error('Error fetching watch providers:', err);
+      }
+    };
+
+    if (isOpen && movie) {
       fetchWatchProviders();
     }
   }, [isOpen, movie]);
