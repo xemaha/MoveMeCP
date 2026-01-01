@@ -54,6 +54,14 @@ interface MovieListProps {
   }
   watchlistOnly?: boolean
   showPredictions?: boolean
+  providerFilter?: {
+    categories: {
+      flatrate: boolean
+      rent: boolean
+      buy: boolean
+    }
+    providers: Set<number>
+  }
 }
 
 // Tag display component
@@ -93,7 +101,7 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
 }
 
 export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false } = props || {}
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerFilter } = props || {}
   const { user } = useUser()
   
   // Core state
