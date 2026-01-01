@@ -23,20 +23,63 @@ interface MyProvidersSetupProps {
 
 const FEATURED_PROVIDER_IDS = [8, 9, 350, 192, 130, 337, 1899] // Netflix, Prime, Apple TV+, YouTube, Sky Go, Disney+, Max/WOW
 
+// Group providers by their main brand (e.g., all Amazon variants under one group)
+const PROVIDER_GROUPS: Record<string, { mainId: number; variants: number[]; displayName: string }> = {
+  'amazon': {
+    mainId: 9,
+    variants: [9, 10, 119], // Amazon Prime Video, Amazon Video
+    displayName: 'Amazon Prime Video'
+  },
+  'apple': {
+    mainId: 350,
+    variants: [350, 2], // Apple TV+, Apple TV
+    displayName: 'Apple TV'
+  },
+  'sky': {
+    mainId: 130,
+    variants: [130, 207, 29], // Sky Go, Sky X, Sky Store
+    displayName: 'Sky'
+  }
+}
+
 export function MyProvidersSetup({ availableProviders, isLoading, profile, onChange }: MyProvidersSetupProps) {
   const [showSetup, setShowSetup] = useState(false)
   const [showAllProviders, setShowAllProviders] = useState(false)
 
-  // Deduplicate providers by name, keeping the first occurrence
-  const deduplicatedProviders = useMemo(() => {
+  // Deduplicate and group providers
+  const processedProviders = useMemo(() => {
     const seen = new Set<string>()
-    return availableProviders.filter(provider => {
+    const processed = availableProviders.filter(provider => {
       const normalizedName = provider.provider_name.toLowerCase().trim()
       if (seen.has(normalizedName)) return false
       seen.add(normalizedName)
       return true
     })
+
+    // For grouped providers, use main ID and display name
+    return processed.map(provider => {
+      for (const [, group] of Object.entries(PROVIDER_GROUPS)) {
+        if (group.variants.includes(provider.provider_id)) {
+          return {
+            ...provider,
+            provider_id: group.mainId,
+            provider_name: group.displayName
+          }
+        }
+      }
+      return provider
+    })
   }, [availableProviders])
+
+  // Deduplicate by provider_id to avoid showing same group twice
+  const deduplicatedProviders = useMemo(() => {
+    const seen = new Set<number>()
+    return processedProviders.filter(p => {
+      if (seen.has(p.provider_id)) return false
+      seen.add(p.provider_id)
+      return true
+    })
+  }, [processedProviders])
 
   // Split into featured and others
   const featuredProviders = useMemo(() => {
@@ -62,24 +105,55 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
       buy: new Set(profile.buy)
     }
     
-    if (newProfile[category].has(providerId)) {
-      newProfile[category].delete(providerId)
+    // Check if this is a grouped provider - if so, toggle all variants
+    let providerIds = [providerId]
+    for (const [, group] of Object.entries(PROVIDER_GROUPS)) {
+      if (group.mainId === providerId) {
+        providerIds = group.variants
+        break
+      }
+    }
+    
+    // Check if any variant is currently selected
+    const anySelected = providerIds.some(id => newProfile[category].has(id))
+    
+    // Toggle all variants together
+    if (anySelected) {
+      providerIds.forEach(id => newProfile[category].delete(id))
     } else {
-      newProfile[category].add(providerId)
+      providerIds.forEach(id => newProfile[category].add(id))
     }
     
     onChange(newProfile)
   }
 
   const isProviderSelected = (providerId: number, category: 'flatrate' | 'rent' | 'buy') => {
+    // Check if this is a grouped provider
+    for (const [, group] of Object.entries(PROVIDER_GROUPS)) {
+      if (group.mainId === providerId) {
+        // For grouped providers, check if ANY variant is selected
+        return group.variants.some(id => profile[category].has(id))
+      }
+    }
     return profile[category].has(providerId)
   }
 
   const getProviderCategories = (providerId: number) => {
     const categories: string[] = []
-    if (profile.flatrate.has(providerId)) categories.push('Abo')
-    if (profile.rent.has(providerId)) categories.push('Leihen')
-    if (profile.buy.has(providerId)) categories.push('Kaufen')
+    
+    // Check if this is a grouped provider
+    let checkIds = [providerId]
+    for (const [, group] of Object.entries(PROVIDER_GROUPS)) {
+      if (group.mainId === providerId) {
+        checkIds = group.variants
+        break
+      }
+    }
+    
+    // Check categories for all variants
+    if (checkIds.some(id => profile.flatrate.has(id))) categories.push('Abo')
+    if (checkIds.some(id => profile.rent.has(id))) categories.push('Leihen')
+    if (checkIds.some(id => profile.buy.has(id))) categories.push('Kaufen')
     return categories
   }
 
