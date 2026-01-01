@@ -21,7 +21,7 @@ interface MyProvidersSetupProps {
   onChange: (profile: UserProviderProfile) => void
 }
 
-const FEATURED_PROVIDER_IDS = [8, 9, 350, 192, 130, 337, 1899] // Netflix, Prime, Apple TV+, YouTube, Sky Go, Disney+, Max/WOW
+const FEATURED_PROVIDER_IDS = [8, 9, 350, 192, 130, 337] // Netflix, Prime, Apple TV+, YouTube, Sky Go, Disney+
 
 // Group providers by their main brand (e.g., all Amazon variants under one group)
 const PROVIDER_GROUPS: Record<string, { mainId: number; variants: number[]; displayName: string }> = {
