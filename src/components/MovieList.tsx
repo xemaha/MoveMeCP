@@ -13,97 +13,164 @@ interface Rating {
   rating: number
   user_name: string
   user_id: string
-}
+      {/* Recommendations Section */}
+      {user && !hideRecommendations && (
+        showOnlyRecommendations ? (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen</h3>
+            {isCalculatingRecommendations && (
+              <div className="text-sm text-gray-600">Berechne Empfehlungen...</div>
+            )}
+            {recommendations.length > 0 ? (
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Basierend auf Nutzern mit ähnlichem Geschmack</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {recommendations
+                    .filter(rec => {
+                      const typeFilter = contentTypeFilter || filters.contentTypes
+                      const contentType = rec.movie.content_type?.toLowerCase()
+                      if (contentType === 'film') return typeFilter.film
+                      if (contentType === 'serie') return typeFilter.serie
+                      if (contentType === 'buch') return typeFilter.buch
+                      return true
+                    })
+                    .map((rec) => (
+                      <div
+                        key={rec.movie.id}
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-green-200"
+                      >
+                        <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
+                          {rec.movie.poster_url ? (
+                            <div className="w-full h-40 overflow-hidden">
+                              <img
+                                src={rec.movie.poster_url}
+                                alt={rec.movie.title}
+                                className="w-full h-full object-cover hover:scale-105 transition-transform"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                              🎬
+                            </div>
+                          )}
+                          <div className="p-3 space-y-2">
+                            <div className="flex justify-between items-start gap-2">
+                              <h4 className="text-sm font-semibold text-gray-800 line-clamp-2">
+                                {rec.movie.title}
+                              </h4>
+                              <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                {rec.score}% Match
+                              </span>
+                            </div>
+                            {rec.movie.content_type && (
+                              <span className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full uppercase">
+                                {rec.movie.content_type}
+                              </span>
+                            )}
+                            {rec.movie.description && (
+                              <p className="text-xs text-gray-600 line-clamp-2">{rec.movie.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!</div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen für dich</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCalculateRecommendations}
+                  disabled={isCalculatingRecommendations}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {isCalculatingRecommendations ? 'Berechne...' : showRecommendations ? '🔄 Neu berechnen' : '✨ Empfehlungen anzeigen'}
+                </button>
+                {showRecommendations && (
+                  <button
+                    onClick={() => setShowRecommendations(false)}
+                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                    title="Empfehlungen ausblenden"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {showRecommendations && recommendations.length > 0 && (
+              <div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Basierend auf Nutzern mit ähnlichem Geschmack wie du
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+                  {recommendations
+                    .filter(rec => {
+                      const typeFilter = contentTypeFilter || filters.contentTypes
+                      const contentType = rec.movie.content_type?.toLowerCase()
+                      if (contentType === 'film') return typeFilter.film
+                      if (contentType === 'serie') return typeFilter.serie
+                      if (contentType === 'buch') return typeFilter.buch
+                      return true
+                    })
+                    .map((rec) => (
+                      <div
+                        key={rec.movie.id}
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-green-300"
+                      >
+                        <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
+                          {rec.movie.poster_url ? (
+                            <div className="w-full h-40 overflow-hidden">
+                              <img
+                                src={rec.movie.poster_url}
+                                alt={rec.movie.title}
+                                className="w-full h-full object-cover hover:scale-105 transition-transform"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                              🎬
+                            </div>
+                          )}
+                          <div className="p-3 space-y-2">
+                            <div className="flex justify-between items-start gap-2">
+                              <h4 className="text-sm font-semibold text-gray-800 line-clamp-2">
+                                {rec.movie.title}
+                              </h4>
+                              <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                                {rec.score}% Match
+                              </span>
+                            </div>
+                            {rec.movie.content_type && (
+                              <span className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full uppercase">
+                                {rec.movie.content_type}
+                              </span>
+                            )}
+                            {rec.movie.description && (
+                              <p className="text-xs text-gray-600 line-clamp-2">{rec.movie.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
-interface EnhancedMovie extends Movie {
-  tags: Tag[]
-  averageRating: number
-  ratingCount: number
-  ratings: Rating[]
-  actor?: string
-  director?: string
-  predictedRating?: number
-}
-
-interface FilterSettings {
-  searchQuery: string
-  userType: 'all' | 'rated' | 'watchlist' | 'unrated'
-  userName: string
-  minRating: number
-  maxRating: number
-  selectedTags: string[]
-  contentTypes: {
-    film: boolean
-    serie: boolean
-    buch: boolean
-  }
-}
-
-// Range component props types
-type RangeTrackProps = { props: any; children: React.ReactNode }
-type RangeThumbProps = { props: any; index: number }
-
-interface MovieListProps {
-  defaultShowRecommendations?: boolean
-  showOnlyRecommendations?: boolean
-  hideRecommendations?: boolean
-  contentTypeFilter?: {
-    film: boolean
-    serie: boolean
-    buch: boolean
-  }
-  watchlistOnly?: boolean
-  showPredictions?: boolean
-}
-
-// Tag display component
-const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
-  const [expanded, setExpanded] = useState(false)
-  
-  if (!tags?.length) return null
-  
-  const sortedTags = [...tags].sort((a, b) => a.name.localeCompare(b.name))
-  const visibleTags = expanded ? sortedTags : sortedTags.slice(0, 8)
-  const hasMore = sortedTags.length > visibleTags.length
-
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {visibleTags.map((tag) => (
-        <span
-          key={tag.id}
-          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-          style={{
-            backgroundColor: tag.color + '20',
-            color: tag.color
-          }}
-        >
-          {tag.name}
-        </span>
-      ))}
-      {hasMore && (
-        <button
-          className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Weniger anzeigen' : 'Alle anzeigen'}
-        </button>
+            {showRecommendations && recommendations.length === 0 && (
+              <div className="text-center py-6 text-gray-600">
+                Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!
+              </div>
+            )}
+          </div>
+        )
       )}
-    </div>
-  )
-}
-
-export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false } = props || {}
-  const { user } = useUser()
-  
-  // Core state
-  const [movies, setMovies] = useState<EnhancedMovie[]>([])
-  const [allTags, setAllTags] = useState<Tag[]>([])
-  const [availableUsers, setAvailableUsers] = useState<string[]>([])
-  const [watchlistMovies, setWatchlistMovies] = useState<Set<string>>(new Set())
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  
   // Filter state
   const [filters, setFilters] = useState<FilterSettings>({
     searchQuery: '',
