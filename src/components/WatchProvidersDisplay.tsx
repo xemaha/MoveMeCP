@@ -13,9 +13,25 @@ export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersD
   }
 
   // Versuche Daten für Deutschland zu holen, fallback auf das erste verfügbare Land
-  const providers = Object.entries(movie.watch_providers).find(([_, data]) => data && data.results && data.results.length > 0)?.[1]
+  const countryData = movie.watch_providers.DE || Object.values(movie.watch_providers)[0] as any
+  
+  if (!countryData) {
+    return null
+  }
 
-  if (!providers || !providers.results || providers.results.length === 0) {
+  // Sammle alle Provider aus flatrate, rent, buy
+  const allProviders = [
+    ...(countryData.flatrate || []),
+    ...(countryData.rent || []),
+    ...(countryData.buy || [])
+  ]
+
+  // Dedupliziere basierend auf provider_id
+  const uniqueProviders = Array.from(
+    new Map(allProviders.map(p => [p.provider_id, p])).values()
+  )
+
+  if (uniqueProviders.length === 0) {
     return null
   }
 
@@ -26,7 +42,7 @@ export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersD
     <div className="flex flex-col gap-2">
       <p className="text-xs font-semibold text-gray-700">📺 Verfügbar bei:</p>
       <div className={`flex flex-wrap ${containerClass}`}>
-        {providers.results.map((provider: any) => (
+        {uniqueProviders.map((provider: any) => (
           <a
             key={provider.provider_id}
             href={providers.link || '#'}
