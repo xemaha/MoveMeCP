@@ -5,11 +5,17 @@ import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'
 import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieList } from '@/components/MovieList'
+import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { calculatePredictedRatings } from '@/lib/recommendations'
 
 function WatchlistContent() {
   const { user, isLoading } = useUser()
   const [showPredictions, setShowPredictions] = useState(false)
+  const [contentTypes, setContentTypes] = useState({
+    film: true,
+    serie: true,
+    buch: false
+  })
   const hasCalcPredictions = useRef(false)
 
   useEffect(() => {
@@ -39,8 +45,10 @@ function WatchlistContent() {
     <div className="min-h-screen bg-gray-50">
       <UserHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
+
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <MovieList hideRecommendations watchlistOnly showPredictions={showPredictions} />
+          <MovieList hideRecommendations watchlistOnly showPredictions={showPredictions} contentTypeFilter={contentTypes} />
         </div>
       </main>
     </div>
