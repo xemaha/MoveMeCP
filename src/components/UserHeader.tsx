@@ -15,10 +15,10 @@ export function UserHeader() {
   if (!user) return null
 
   const navigationItems = [
-    { label: 'Hinzufügen', path: '/add' },
-    { label: 'Suchen', path: '/search' },
-    { label: 'Empfehlungen', path: '/recommendations' },
-    { label: 'Watchlist', path: '/watchlist' }
+    { label: 'Hinzufügen', path: '/add', emoji: '➕' },
+    { label: 'Suchen', path: '/search', emoji: '🔍' },
+    { label: 'Empfehlungen', path: '/recommendations', emoji: '✨' },
+    { label: 'Watchlist', path: '/watchlist', emoji: '👁️' }
   ]
 
   return (
@@ -55,13 +55,14 @@ export function UserHeader() {
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`px-2 py-1 rounded text-lg transition-colors whitespace-nowrap ${
                   pathname === item.path
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    ? 'bg-blue-100'
+                    : 'hover:bg-gray-100'
                 }`}
+                title={item.label}
               >
-                {item.label.substring(0, 3)}
+                {item.emoji}
               </button>
             ))}
           </div>
