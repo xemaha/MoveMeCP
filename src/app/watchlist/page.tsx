@@ -64,22 +64,31 @@ function WatchlistContent() {
         }
 
         const movieIds = watchlistData.map(w => w.movie_id)
+        console.log('Total watchlist movies:', movieIds.length)
         
         // Get movie details in batches to avoid URL length limits
-        const batchSize = 10
+        const batchSize = 5  // Reduced batch size for UUIDs
         const allMovies: any[] = []
         
         for (let i = 0; i < movieIds.length; i += batchSize) {
           const batch = movieIds.slice(i, i + batchSize)
-          const { data: batchMovies } = await supabase
-            .from('movies')
-            .select('id, title, tmdb_id, media_type')
-            .in('id', batch)
-          
-          if (batchMovies) {
-            allMovies.push(...batchMovies)
+          try {
+            const { data: batchMovies, error } = await supabase
+              .from('movies')
+              .select('id, title, tmdb_id, media_type')
+              .in('id', batch)
+            
+            if (error) {
+              console.error('Batch query error:', error)
+            } else if (batchMovies) {
+              allMovies.push(...batchMovies)
+            }
+          } catch (err) {
+            console.error('Batch query exception:', err)
           }
         }
+        
+        console.log('Loaded movies:', allMovies.length)
         
         if (allMovies.length === 0) {
           setIsLoadingProviders(false)
