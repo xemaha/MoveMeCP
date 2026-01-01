@@ -189,11 +189,6 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
         {/* Provider Name */}
         <div className="flex-1 min-w-0">
           <p className="font-medium text-gray-900 text-sm truncate">{provider.provider_name}</p>
-          {isSelected && (
-            <p className="text-xs text-blue-600 mt-0.5">
-              {categories.join(', ')}
-            </p>
-          )}
         </div>
         
         {/* Category Buttons */}
