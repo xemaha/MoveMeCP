@@ -27,17 +27,31 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
 
   const toggleProvider = (providerId: number) => {
     const newProviders = new Set(filter.providers)
-    if (newProviders.has(providerId)) {
-      newProviders.delete(providerId)
-    } else {
+    
+    // If currently all are selected (empty set), start by selecting only this one
+    if (newProviders.size === 0) {
       newProviders.add(providerId)
+      onChange({ ...filter, providers: newProviders })
+      return
     }
     
-    // If all providers are selected, clear the set (= show all)
-    if (newProviders.size === availableProviders.length) {
-      onChange({ ...filter, providers: new Set() })
+    // Toggle this specific provider
+    if (newProviders.has(providerId)) {
+      newProviders.delete(providerId)
+      // If we deselected the last one, go back to "all selected"
+      if (newProviders.size === 0) {
+        onChange({ ...filter, providers: new Set() })
+      } else {
+        onChange({ ...filter, providers: newProviders })
+      }
     } else {
-      onChange({ ...filter, providers: newProviders })
+      newProviders.add(providerId)
+      // If all providers are now selected, clear the set (= show all)
+      if (newProviders.size === availableProviders.length) {
+        onChange({ ...filter, providers: new Set() })
+      } else {
+        onChange({ ...filter, providers: newProviders })
+      }
     }
   }
 
