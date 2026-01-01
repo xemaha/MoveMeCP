@@ -46,23 +46,21 @@ export function UserHeader() {
           </div>
 
           {/* Mobile Navigation - Shown only on mobile */}
-          <div className="md:hidden flex gap-2">
+          <div className="md:hidden flex gap-1.5">
             {navigationItems.map(item => (
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg border text-sm transition-colors whitespace-nowrap ${
+                className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-colors ${
                   pathname === item.path
-                    ? 'bg-blue-50 border-blue-300 text-blue-800 shadow-sm'
-                    : 'bg-white border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-blue-50'
+                    ? 'bg-blue-50 border-blue-300 shadow-sm'
+                    : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50'
                 }`}
                 title={item.label}
+                aria-label={item.label}
               >
-                <span className="text-xl" aria-hidden>
+                <span className="text-lg">
                   {item.emoji}
-                </span>
-                <span className="text-[11px] leading-tight mt-1 font-medium">
-                  {item.label}
                 </span>
               </button>
             ))}
