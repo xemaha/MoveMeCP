@@ -6,11 +6,7 @@ import { useUser } from '@/lib/UserContext'
 export function UserHeader() {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, setUser } = useUser()
-
-  const handleLogout = () => {
-    setUser(null)
-  }
+  const { user } = useUser()
 
   if (!user) return null
 
@@ -50,29 +46,27 @@ export function UserHeader() {
           </div>
 
           {/* Mobile Navigation - Shown only on mobile */}
-          <div className="md:hidden flex gap-1">
+          <div className="md:hidden flex gap-2">
             {navigationItems.map(item => (
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`px-2 py-1 rounded text-lg transition-colors whitespace-nowrap ${
+                className={`flex flex-col items-center justify-center px-3 py-2 rounded-lg border text-sm transition-colors whitespace-nowrap ${
                   pathname === item.path
-                    ? 'bg-blue-100'
-                    : 'hover:bg-gray-100'
+                    ? 'bg-blue-50 border-blue-300 text-blue-800 shadow-sm'
+                    : 'bg-white border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-blue-50'
                 }`}
                 title={item.label}
               >
-                {item.emoji}
+                <span className="text-xl" aria-hidden>
+                  {item.emoji}
+                </span>
+                <span className="text-[11px] leading-tight mt-1 font-medium">
+                  {item.label}
+                </span>
               </button>
             ))}
           </div>
-          
-          <button
-            onClick={handleLogout}
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap"
-          >
-            Abmelden
-          </button>
         </div>
       </div>
     </div>

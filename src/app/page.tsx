@@ -6,7 +6,7 @@ import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'
 
 function LandingContent() {
-  const { user, isLoading } = useUser()
+  const { user, isLoading, setUser } = useUser()
 
   if (isLoading) {
     return (
@@ -80,6 +80,15 @@ function LandingContent() {
               <span className="mt-auto text-sm font-medium text-blue-600 group-hover:text-blue-700">Weiter →</span>
             </Link>
           ))}
+        </div>
+
+        <div className="mt-10 text-center">
+          <button
+            onClick={() => setUser(null)}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Abmelden
+          </button>
         </div>
       </main>
     </div>
