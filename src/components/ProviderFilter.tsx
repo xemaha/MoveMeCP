@@ -16,6 +16,7 @@ interface ProviderFilterProps {
       flatrate: boolean
       rent: boolean
       buy: boolean
+      unavailable: boolean
     }
     providers: Set<number>
   }
@@ -127,6 +128,19 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
                 }`}
               >
                 Zum Kaufen
+              </button>
+              <button
+                onClick={() => onChange({
+                  ...filter,
+                  categories: { ...filter.categories, unavailable: !filter.categories.unavailable }
+                })}
+                className={`px-4 py-2 rounded-lg border-2 transition-all ${
+                  filter.categories.unavailable
+                    ? 'bg-gray-50 border-gray-500 text-gray-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-500'
+                }`}
+              >
+                Nicht verfügbar
               </button>
             </div>
           </div>

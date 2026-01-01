@@ -59,6 +59,7 @@ interface MovieListProps {
       flatrate: boolean
       rent: boolean
       buy: boolean
+      unavailable: boolean
     }
     providers: Set<number>
   }
@@ -661,16 +662,17 @@ export function MovieList(props?: MovieListProps) {
     if (providerFilter && (providerFilter.providers.size > 0 || 
         !providerFilter.categories.flatrate || 
         !providerFilter.categories.rent || 
-        !providerFilter.categories.buy)) {
+        !providerFilter.categories.buy ||
+        !providerFilter.categories.unavailable)) {
       
       const movieProviderData = movieProviders.get(movie.id)
       if (!movieProviderData) {
-        // No provider data available - exclude from filter
-        matchesProviderFilter = false
+        // No provider data available - only show if 'unavailable' is selected
+        matchesProviderFilter = providerFilter.categories.unavailable
       } else {
         const countryData = movieProviderData.DE || Object.values(movieProviderData)[0] as any
         if (!countryData) {
-          matchesProviderFilter = false
+          matchesProviderFilter = providerFilter.categories.unavailable
         } else {
           // Check if movie has providers in selected categories
           const availableProviders: any[] = []
@@ -685,7 +687,8 @@ export function MovieList(props?: MovieListProps) {
           }
           
           if (availableProviders.length === 0) {
-            matchesProviderFilter = false
+            // Movie has no providers in selected categories - show if 'unavailable' is selected
+            matchesProviderFilter = providerFilter.categories.unavailable
           } else if (providerFilter.providers.size > 0) {
             // Check if movie has any of the selected providers
             matchesProviderFilter = availableProviders.some(p => 

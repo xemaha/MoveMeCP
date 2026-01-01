@@ -29,7 +29,8 @@ function WatchlistContent() {
     categories: {
       flatrate: true,
       rent: true,
-      buy: true
+      buy: true,
+      unavailable: true
     },
     providers: new Set<number>() // Empty = all selected
   })
