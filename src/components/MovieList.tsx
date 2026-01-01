@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Range } from 'react-range'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
@@ -42,6 +42,19 @@ interface FilterSettings {
 type RangeTrackProps = { props: any; children: React.ReactNode }
 type RangeThumbProps = { props: any; index: number }
 
+interface MovieListProps {
+  defaultShowRecommendations?: boolean
+  showOnlyRecommendations?: boolean
+  hideRecommendations?: boolean
+  contentTypeFilter?: {
+    film: boolean
+    serie: boolean
+    buch: boolean
+  }
+  watchlistOnly?: boolean
+  showPredictions?: boolean
+}
+
 // Tag display component
 const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
   const [expanded, setExpanded] = useState(false)
@@ -78,7 +91,8 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
   )
 }
 
-export function MovieList() {
+export function MovieList(props?: MovieListProps) {
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false } = props || {}
   const { user } = useUser()
   
   // Core state
@@ -115,10 +129,11 @@ export function MovieList() {
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({})
   const [userSearchInput, setUserSearchInput] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
-  const [showRecommendations, setShowRecommendations] = useState(false)
+  const [showRecommendations, setShowRecommendations] = useState(defaultShowRecommendations)
   const [recommendations, setRecommendations] = useState<any[]>([])
   const [isCalculatingRecommendations, setIsCalculatingRecommendations] = useState(false)
   const [predictedRatings, setPredictedRatings] = useState<Map<string, number>>(new Map())
+  const hasAutoCalcRecs = useRef(false)
 
   // Initialize data
   useEffect(() => {
@@ -132,6 +147,22 @@ export function MovieList() {
   useEffect(() => {
     loadTagUsageStats()
   }, [movies])
+
+  // Auto-calculate recommendations when on recommendations page
+  useEffect(() => {
+    if (defaultShowRecommendations && !hasAutoCalcRecs.current && user && movies.length > 0) {
+      handleCalculateRecommendations()
+      hasAutoCalcRecs.current = true
+    }
+  }, [defaultShowRecommendations, user, movies.length])
+
+  // Auto-calculate predictions for watchlist
+  useEffect(() => {
+    if (showPredictions && user && movies.length > 0) {
+      const predictions = calculatePredictedRatings(user.id, movies)
+      setPredictedRatings(predictions)
+    }
+  }, [showPredictions, user, movies.length])
 
   const loadInitialData = async () => {
     try {
@@ -483,6 +514,11 @@ export function MovieList() {
   const filteredMovies = movies.filter(movie => {
     // Ensure movie has valid id
     if (!movie.id) return false
+
+    // If watchlistOnly, only show movies in watchlist
+    if (watchlistOnly && !watchlistMovies.has(movie.id)) {
+      return false
+    }
     
     // Search filter
     const searchLower = filters.searchQuery.toLowerCase()
@@ -560,8 +596,9 @@ export function MovieList() {
       )
     }
 
-    // Content type filter
-    const matchesContentType = filters.contentTypes[movie.content_type as keyof typeof filters.contentTypes]
+    // Content type filter - use contentTypeFilter from props if provided, otherwise use filters state
+    const typeFilter = contentTypeFilter || filters.contentTypes
+    const matchesContentType = typeFilter[movie.content_type as keyof typeof typeFilter]
 
     return matchesSearch && matchesUserTypeFilter && matchesRatingRange && matchesTagFilter && matchesContentType
   })
@@ -644,7 +681,7 @@ export function MovieList() {
   return (
     <div className="space-y-6">
       {/* Recommendations Section */}
-      {user && (
+      {user && !hideRecommendations && (
         <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen für dich</h3>
@@ -676,10 +713,11 @@ export function MovieList() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
                 {recommendations
                   .filter(rec => {
+                    const typeFilter = contentTypeFilter || filters.contentTypes
                     const contentType = rec.movie.content_type?.toLowerCase()
-                    if (contentType === 'film') return filters.contentTypes.film
-                    if (contentType === 'serie') return filters.contentTypes.serie
-                    if (contentType === 'buch') return filters.contentTypes.buch
+                    if (contentType === 'film') return typeFilter.film
+                    if (contentType === 'serie') return typeFilter.serie
+                    if (contentType === 'buch') return typeFilter.buch
                     return true
                   })
                   .map((rec) => (
@@ -748,48 +786,55 @@ export function MovieList() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="space-y-4">
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="Suche nach Titel, Tags, Schauspielern..."
+      {!showOnlyRecommendations && (
+        <>
+          {/* Only show filters if not watchlistOnly */}
+          {!watchlistOnly && (
+            <>
+              {/* Filters */}
+              <div className="space-y-4">
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Suche nach Titel, Tags, Schauspielern..."
           value={filters.searchQuery}
           onChange={(e) => updateFilters({ searchQuery: e.target.value })}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
 
-        {/* Content Type Filter */}
-        <div className="p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Content-Type</h3>
-          <div className="flex gap-2 flex-wrap">
-            {Object.entries(filters.contentTypes).map(([type, checked]) => {
-              const icons: Record<string, string> = {
-                film: '🎬 Filme',
-                serie: '📺 Serien',
-                buch: '📚 Bücher'
-              }
-              return (
-                <button
-                  key={type}
-                  onClick={() => updateFilters({
-                    contentTypes: {
-                      ...filters.contentTypes,
-                      [type]: !checked
-                    }
-                  })}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    checked
-                      ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
-                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                  }`}
-                >
-                  {icons[type]}
-                </button>
-              )
-            })}
+        {/* Content Type Filter - Hidden when contentTypeFilter is provided from parent */}
+        {!contentTypeFilter && (
+          <div className="p-4 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Content-Type</h3>
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(filters.contentTypes).map(([type, checked]) => {
+                const icons: Record<string, string> = {
+                  film: '🎬 Filme',
+                  serie: '📺 Serien',
+                  buch: '📚 Bücher'
+                }
+                return (
+                  <button
+                    key={type}
+                    onClick={() => updateFilters({
+                      contentTypes: {
+                        ...filters.contentTypes,
+                        [type]: !checked
+                      }
+                    })}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      checked
+                        ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    {icons[type]}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Personal Filter - For Current User */}
         {user && (
@@ -800,7 +845,7 @@ export function MovieList() {
                 { value: 'all', label: '🎬 Alle Filme & Serien' },
                 { value: 'watchlist', label: '👁️ Meine Watchlist' },
                 { value: 'rated', label: '⭐ Von mir bewertet' },
-                { value: 'unrated', label: '☆ Noch nicht bewertet' }
+                { value: 'unrated', label: '☆ Von mir noch nicht bewertet' }
               ].map(option => (
                 <button
                   key={option.value}
@@ -1032,18 +1077,20 @@ export function MovieList() {
               {showAllTagsInFilter ? 'Weniger anzeigen' : 'Alle anzeigen'}
             </button>
           )}
+          </div>
         </div>
-      </div>
+            </>
+          )}
 
-      {/* Results count */}
-      <div className="text-sm text-gray-600">
-        {filteredMovies.length} {filteredMovies.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
-      </div>
+          {/* Results count */}
+          <div className="text-sm text-gray-600">
+            {filteredMovies.length} {filteredMovies.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
+          </div>
 
-      {/* Content */}
-      {viewMode === 'movie-based' ? (
-        /* Movie Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          {/* Content */}
+          {viewMode === 'movie-based' ? (
+            /* Movie Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {filteredMovies.map((movie) => (
             <div key={movie.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
               <div className="cursor-pointer" onClick={() => setSelectedMovie(movie)}>
@@ -1192,10 +1239,10 @@ export function MovieList() {
               )}
             </div>
           ))}
-        </div>
-      ) : (
-        /* Tag-based view */
-        <div className="space-y-6">
+            </div>
+          ) : (
+            /* Tag-based view */
+            <div className="space-y-6">
           {getTagBasedGroups().map(({ tagName, tag, movies }) => (
             <div key={tagName} className="bg-white rounded-lg shadow-md overflow-hidden">
               <div 
@@ -1252,17 +1299,19 @@ export function MovieList() {
               </div>
             </div>
           ))}
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* No results */}
-      {filteredMovies.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500 text-lg">Keine Filme gefunden.</p>
-          <p className="text-gray-400 text-sm mt-2">
-            Versuche andere Filter oder füge neue Filme hinzu.
-          </p>
-        </div>
+          {/* No results */}
+          {filteredMovies.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg">Keine Filme gefunden.</p>
+              <p className="text-gray-400 text-sm mt-2">
+                Versuche andere Filter oder füge neue Filme hinzu.
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       {/* Movie Detail Modal */}

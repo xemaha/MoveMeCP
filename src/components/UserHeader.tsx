@@ -1,8 +1,10 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useUser } from '@/lib/UserContext'
 
 export function UserHeader() {
+  const router = useRouter()
   const { user, setUser } = useUser()
 
   const handleLogout = () => {
@@ -16,7 +18,12 @@ export function UserHeader() {
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">🎬 MoveMe</h1>
+            <button
+              onClick={() => router.push('/')}
+              className="text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
+            >
+              🎬 MoveMe
+            </button>
             <span className="text-sm text-gray-600">
               von <span className="font-medium text-blue-600">{user.name}</span>
             </span>

@@ -1,10 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // Use demo version if no Supabase credentials are provided
-let supabase: ReturnType<typeof createClient>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let supabase: SupabaseClient<any, 'public', any> | any
 
 if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'your-project-url' || supabaseAnonKey === 'your-anon-key') {
   // Use demo version for testing
@@ -18,7 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl === 'your-project-url' || su
   supabase = demoModule.supabase
 } else {
   // Use real Supabase
-  supabase = createClient(supabaseUrl, supabaseAnonKey)
+  supabase = createClient<any>(supabaseUrl, supabaseAnonKey)
   if (typeof window !== 'undefined') {
     console.log('🎬 Produktiv-Modus: Verwende Supabase Datenbank')
   }

@@ -25,7 +25,15 @@ interface TmdbSuggestion {
   media_type: 'movie' | 'tv';
 }
 
-export default function AddMovieForm() {
+interface AddMovieFormProps {
+  selectedContentType?: {
+    film: boolean
+    serie: boolean
+    buch: boolean
+  }
+}
+
+export default function AddMovieForm({ selectedContentType }: AddMovieFormProps) {
   // Handler für Google Books Auswahl
   const handleBookSuggestionClick = (book: any) => {
     setTitle(book.title);
@@ -51,6 +59,16 @@ export default function AddMovieForm() {
     };
     fetchTags();
   }, []);
+
+  // Set contentType based on selectedContentType from props
+  useEffect(() => {
+    if (selectedContentType) {
+      if (selectedContentType.film) setContentType('film')
+      else if (selectedContentType.serie) setContentType('serie')
+      else if (selectedContentType.buch) setContentType('buch')
+    }
+  }, [selectedContentType])
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   // Typ-Auswahl: film | serie | buch
@@ -570,30 +588,12 @@ export default function AddMovieForm() {
     return (
       <form onSubmit={handleSubmit} className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-4">Titel hinzufügen</h2>
-      {/* Typ Dropdown */}
-      <div>
-        <label htmlFor="contentType" className="block text-sm font-medium text-gray-700 mb-1">Typ *</label>
-        <select
-          id="contentType"
-          value={contentType}
-          onChange={e => {
-            setContentType(e.target.value as 'film' | 'serie' | 'buch');
-            setTmdbSuggestions([]);
-            setShowTmdbSuggestions(false);
-            setPosterUrl('');
-            setDirector('');
-            setActor('');
-            setDescription('');
-            setGenre('');
-            setTrailerUrl(undefined);
-          }}
-          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="film">Film</option>
-          <option value="serie">Serie</option>
-          <option value="buch">Buch</option>
-        </select>
-      </div>
+      {/* Typ Dropdown - Hidden since we use ContentTypeFilter on page level */}
+      <input
+        type="hidden"
+        id="contentType"
+        value={contentType}
+      />
 
   {/* Title Input (mit/ohne Autocomplete je nach Typ) */}
       <div className="relative">
