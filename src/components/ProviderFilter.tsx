@@ -25,6 +25,8 @@ interface ProviderFilterProps {
 export function ProviderFilter({ availableProviders, isLoading, filter, onChange }: ProviderFilterProps) {
   const [showProviderFilter, setShowProviderFilter] = useState(false)
 
+  console.log('ProviderFilter render - availableProviders:', availableProviders.length, 'isLoading:', isLoading)
+
   const toggleProvider = (providerId: number) => {
     const newProviders = new Set(filter.providers)
     

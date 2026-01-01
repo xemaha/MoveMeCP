@@ -124,6 +124,7 @@ function WatchlistContent() {
         const providersList = Array.from(providersMap.values())
           .sort((a, b) => a.provider_name.localeCompare(b.provider_name))
         
+        console.log('Loaded providers:', providersList.length, providersList)
         setAvailableProviders(providersList)
       } catch (err) {
         console.error('Error loading providers:', err)
