@@ -9,6 +9,7 @@ import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { ProviderFilter } from '@/components/ProviderFilter'
 import { ProviderTypeFilter } from '@/components/ProviderTypeFilter'
 import { MyProvidersSetup } from '@/components/MyProvidersSetup'
+import { loadUserProviderProfile, saveUserProviderProfile } from '@/lib/providerProfile'
 import { calculatePredictedRatings } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 
@@ -70,6 +71,26 @@ function WatchlistContent() {
     // Use common providers as default
     setAvailableProviders(commonProviders)
   }, [])
+
+  // Load user's provider profile when user logs in
+  useEffect(() => {
+    if (user?.id) {
+      loadUserProviderProfile(user.id).then(profile => {
+        setProviderProfile(profile)
+      })
+    }
+  }, [user?.id])
+
+  // Save provider profile whenever it changes
+  useEffect(() => {
+    if (user?.id) {
+      // Debounce the save to avoid too many requests
+      const timer = setTimeout(() => {
+        saveUserProviderProfile(user.id, providerProfile)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [providerProfile, user?.id])
 
   if (isLoading) {
     return (
