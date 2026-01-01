@@ -159,9 +159,15 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
 
   const totalSelected = profile.flatrate.size + profile.rent.size + profile.buy.size
 
+  // Providers that only support specific categories
+  const CATEGORY_RESTRICTIONS: Record<number, ('flatrate' | 'rent' | 'buy')[]> = {
+    8: ['flatrate'] // Netflix: only subscription
+  }
+
   const renderProvider = (provider: Provider) => {
     const categories = getProviderCategories(provider.provider_id)
     const isSelected = categories.length > 0
+    const allowedCategories = CATEGORY_RESTRICTIONS[provider.provider_id] || ['flatrate', 'rent', 'buy']
     
     return (
       <div
@@ -192,39 +198,45 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
         
         {/* Category Buttons */}
         <div className="flex gap-1.5 flex-shrink-0">
-          <button
-            onClick={() => toggleProvider(provider.provider_id, 'flatrate')}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              isProviderSelected(provider.provider_id, 'flatrate')
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title="Abo"
-          >
-            Abo
-          </button>
-          <button
-            onClick={() => toggleProvider(provider.provider_id, 'rent')}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              isProviderSelected(provider.provider_id, 'rent')
-                ? 'bg-green-500 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title="Leihen"
-          >
-            Leihen
-          </button>
-          <button
-            onClick={() => toggleProvider(provider.provider_id, 'buy')}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              isProviderSelected(provider.provider_id, 'buy')
-                ? 'bg-purple-500 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title="Kaufen"
-          >
-            Kaufen
-          </button>
+          {allowedCategories.includes('flatrate') && (
+            <button
+              onClick={() => toggleProvider(provider.provider_id, 'flatrate')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                isProviderSelected(provider.provider_id, 'flatrate')
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Abo"
+            >
+              Abo
+            </button>
+          )}
+          {allowedCategories.includes('rent') && (
+            <button
+              onClick={() => toggleProvider(provider.provider_id, 'rent')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                isProviderSelected(provider.provider_id, 'rent')
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Leihen"
+            >
+              Leihen
+            </button>
+          )}
+          {allowedCategories.includes('buy') && (
+            <button
+              onClick={() => toggleProvider(provider.provider_id, 'buy')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                isProviderSelected(provider.provider_id, 'buy')
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Kaufen"
+            >
+              Kaufen
+            </button>
+          )}
         </div>
       </div>
     )
