@@ -65,13 +65,23 @@ function WatchlistContent() {
 
         const movieIds = watchlistData.map(w => w.movie_id)
         
-        // Get movie details
-        const { data: movies } = await supabase
-          .from('movies')
-          .select('id, title, tmdb_id, media_type')
-          .in('id', movieIds)
+        // Get movie details in batches to avoid URL length limits
+        const batchSize = 10
+        const allMovies: any[] = []
         
-        if (!movies) {
+        for (let i = 0; i < movieIds.length; i += batchSize) {
+          const batch = movieIds.slice(i, i + batchSize)
+          const { data: batchMovies } = await supabase
+            .from('movies')
+            .select('id, title, tmdb_id, media_type')
+            .in('id', batch)
+          
+          if (batchMovies) {
+            allMovies.push(...batchMovies)
+          }
+        }
+        
+        if (allMovies.length === 0) {
           setIsLoadingProviders(false)
           return
         }
@@ -80,8 +90,10 @@ function WatchlistContent() {
         const { getWatchProviders, searchTMDb } = await import('@/lib/tmdbApi')
         const providersMap = new Map<number, Provider>()
         
+        console.log('Loading providers for', allMovies.length, 'movies')
+        
         await Promise.all(
-          movies.slice(0, 20).map(async (movie: any) => {
+          allMovies.slice(0, 20).map(async (movie: any) => {
             try {
               let tmdbId = movie.tmdb_id
               let mediaType = movie.media_type || 'movie'
