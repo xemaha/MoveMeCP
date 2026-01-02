@@ -496,57 +496,33 @@ export function MovieList(props?: MovieListProps) {
       
       console.log('Looking up user profiles for IDs:', userIds)
       
-      // Load user profiles for these IDs - try multiple approaches
-      let profiles = null
-      let profilesError = null
+      // Load user profiles for these IDs using same approach as personalRecommendations.ts
+      let profiles: any[] = []
       
-      // First try: use filter approach which is more reliable
-      try {
-        const { data: profileData, error: err } = await supabase
+      if (userIds.length === 1) {
+        // Single ID - use eq
+        const { data: profileData } = await supabase
           .from('user_profiles')
           .select('id, name')
-          .filter('id', 'in', `(${userIds.join(',')})`)
-        
-        if (!err) {
-          profiles = profileData
-          profilesError = err
-        }
-      } catch (e) {
-        console.log('Filter approach failed, trying individual queries')
-      }
-      
-      // Fallback: query each ID individually
-      if (!profiles || profiles.length === 0) {
-        profiles = []
-        for (const userId of userIds) {
-          try {
-            const { data: singleProfile, error: singleError } = await supabase
-              .from('user_profiles')
-              .select('id, name')
-              .eq('id', userId)
-              .maybeSingle()
-            
-            if (singleProfile && !singleError) {
-              profiles.push(singleProfile)
-            }
-          } catch (e) {
-            console.log('Individual query failed for:', userId)
-          }
-        }
+          .eq('id', userIds[0])
+          .maybeSingle()
+        if (profileData) profiles = [profileData]
+      } else if (userIds.length > 1) {
+        // Multiple IDs - use in
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('id, name')
+          .in('id', userIds)
+        if (profileData) profiles = profileData
       }
 
       console.log('Found profiles:', profiles)
-      if (profilesError) {
-        console.error('Error loading profiles:', profilesError)
-      }
 
       const userIdToName = new Map<string, string>()
-      if (profiles && !profilesError) {
-        profiles.forEach((profile: any) => {
-          userIdToName.set(profile.id, profile.name || profile.id)
-          console.log('Mapped user:', profile.id, '->', profile.name || profile.id)
-        })
-      }
+      profiles.forEach((profile: any) => {
+        userIdToName.set(profile.id, profile.name || profile.id)
+        console.log('Mapped user:', profile.id, '->', profile.name || profile.id)
+      })
 
       // Build recommender map
       const recommenderMap = new Map<string, string[]>()

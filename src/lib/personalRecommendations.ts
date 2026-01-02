@@ -28,18 +28,29 @@ export async function loadPersonalRecommendations(userId: string): Promise<Perso
     if (data && data.length > 0) {
       const uniqueUserIds = [...new Set(data.map((r: any) => r.from_user_id))]
       
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select('user_id, alias')
-        .in('user_id', uniqueUserIds)
+      let profiles: any[] = []
+      
+      // Try to load user profiles with correct field names
+      if (uniqueUserIds.length === 1) {
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('id, name')
+          .eq('id', uniqueUserIds[0])
+          .maybeSingle()
+        if (profileData) profiles = [profileData]
+      } else if (uniqueUserIds.length > 1) {
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('id, name')
+          .in('id', uniqueUserIds)
+        if (profileData) profiles = profileData
+      }
 
-      if (profilesError) throw profilesError
-
-      const userMap = new Map((profiles as any[])?.map((p: any) => [p.user_id, p.alias]) || [])
+      const userMap = new Map(profiles.map((p: any) => [p.id, p.name]) || [])
 
       return (data as any[]).map((rec: any) => ({
         ...rec,
-        from_user_name: userMap.get(rec.from_user_id) || 'Unbekannt'
+        from_user_name: userMap.get(rec.from_user_id) || rec.from_user_id
       }))
     }
 
