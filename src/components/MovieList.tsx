@@ -475,10 +475,10 @@ export function MovieList(props?: MovieListProps) {
     }
 
     try {
-      // Load all personal recommendations for this user
+      // Load all personal recommendations for this user with from_user_name directly
       const { data, error } = await supabase
         .from('personal_recommendations')
-        .select('movie_id, from_user_id')
+        .select('movie_id, from_user_id, from_user_name')
         .eq('to_user_id', user.id)
 
       if (error) {
@@ -491,44 +491,13 @@ export function MovieList(props?: MovieListProps) {
         return
       }
 
-      // Get unique user IDs
-      const userIds = [...new Set(data.map((rec: any) => rec.from_user_id))]
-      
-      console.log('Looking up user profiles for IDs:', userIds)
-      
-      // Load user profiles for these IDs using same approach as personalRecommendations.ts
-      let profiles: any[] = []
-      
-      if (userIds.length === 1) {
-        // Single ID - use eq
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('id, name')
-          .eq('id', userIds[0])
-          .maybeSingle()
-        if (profileData) profiles = [profileData]
-      } else if (userIds.length > 1) {
-        // Multiple IDs - use in
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('id, name')
-          .in('id', userIds)
-        if (profileData) profiles = profileData
-      }
+      console.log('Loaded personal recommendations data:', data)
 
-      console.log('Found profiles:', profiles)
-
-      const userIdToName = new Map<string, string>()
-      profiles.forEach((profile: any) => {
-        userIdToName.set(profile.id, profile.name || profile.id)
-        console.log('Mapped user:', profile.id, '->', profile.name || profile.id)
-      })
-
-      // Build recommender map
+      // Build recommender map using from_user_name directly from the table
       const recommenderMap = new Map<string, string[]>()
       data.forEach((rec: any) => {
         const movieId = rec.movie_id
-        const fromUserName = userIdToName.get(rec.from_user_id) || rec.from_user_id
+        const fromUserName = rec.from_user_name || rec.from_user_id
         
         if (!recommenderMap.has(movieId)) {
           recommenderMap.set(movieId, [])

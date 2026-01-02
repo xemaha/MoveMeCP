@@ -17,6 +17,7 @@ export async function loadPersonalRecommendations(userId: string): Promise<Perso
       .select(`
         movie_id,
         from_user_id,
+        from_user_name,
         created_at
       `)
       .eq('to_user_id', userId)
@@ -24,37 +25,11 @@ export async function loadPersonalRecommendations(userId: string): Promise<Perso
 
     if (error) throw error
 
-    // Get user names for the recommenders
-    if (data && data.length > 0) {
-      const uniqueUserIds = [...new Set(data.map((r: any) => r.from_user_id))]
-      
-      let profiles: any[] = []
-      
-      // Try to load user profiles with correct field names
-      if (uniqueUserIds.length === 1) {
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('id, name')
-          .eq('id', uniqueUserIds[0])
-          .maybeSingle()
-        if (profileData) profiles = [profileData]
-      } else if (uniqueUserIds.length > 1) {
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('id, name')
-          .in('id', uniqueUserIds)
-        if (profileData) profiles = profileData
-      }
-
-      const userMap = new Map(profiles.map((p: any) => [p.id, p.name]) || [])
-
-      return (data as any[]).map((rec: any) => ({
-        ...rec,
-        from_user_name: userMap.get(rec.from_user_id) || rec.from_user_id
-      }))
-    }
-
-    return data || []
+    // Return data with from_user_name if available, otherwise use from_user_id as fallback
+    return (data || []).map((rec: any) => ({
+      ...rec,
+      from_user_name: rec.from_user_name || rec.from_user_id
+    }))
   } catch (error) {
     console.error('Error loading personal recommendations:', error)
     return []
