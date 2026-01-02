@@ -141,7 +141,8 @@ export function MovieDetailModal({
         year: movie.year ? String(movie.year) : '',
         genre: (movie as any).genre || ''
       });
-      setSelectedTags(movie.tags.map(tag => tag.name));
+      const movieTags = Array.isArray((movie as any).tags) ? (movie as any).tags : [];
+      setSelectedTags(movieTags.map((tag: any) => tag.name));
       fetchAllTags();
     }
   }, [isOpen, movie]);
