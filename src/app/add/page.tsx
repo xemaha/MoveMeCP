@@ -122,7 +122,10 @@ function AddContent() {
       {selectedMovie && (
         <MovieDetailModal
           movie={selectedMovie}
+          isOpen={!!selectedMovie}
           onClose={() => setSelectedMovie(null)}
+          onMovieUpdated={() => {}}
+          hideWatchlistFeature={false}
         />
       )}
     </div>
