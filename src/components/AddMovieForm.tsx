@@ -37,6 +37,10 @@ interface AddMovieFormProps {
 export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddMovieFormProps) {
   // Handler für Google Books Auswahl
   const handleBookSuggestionClick = (book: any) => {
+    // Close dropdowns immediately
+    setShowTmdbSuggestions(false)
+    setShowBookSuggestions(false)
+    
     setTitle(book.title);
     setDescription(book.description);
     setYear(book.publishedDate ? book.publishedDate.slice(0, 4) : '');
@@ -44,7 +48,6 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
     setPosterUrl(book.cover);
     setDirector('');
     setActor(book.authors);
-    setShowBookSuggestions(false);
   };
   // Google Books Autocomplete
   const [bookSuggestions, setBookSuggestions] = useState<any[]>([]);
@@ -233,10 +236,13 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
   // TMDb Auswahl
   const [trailerUrl, setTrailerUrl] = useState<string | undefined>(undefined);
   const handleTmdbSuggestionClick = async (tmdb: TmdbSuggestion) => {
+    // Close dropdowns immediately
+    setShowTmdbSuggestions(false)
+    setShowBookSuggestions(false)
+    
     setTitle(tmdb.title || tmdb.name || '');
     const yearStr = tmdb.release_date || tmdb.first_air_date || '';
     setYear(yearStr ? yearStr.slice(0, 4) : '');
-    setShowTmdbSuggestions(false);
     // Typ automatisch setzen
     let detectedType = 'film';
     let apiMediaType: 'movie' | 'tv' = 'movie';
