@@ -745,19 +745,19 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
       )}
     </div>
   ) : null}
-
-        {/* Poster Preview (direkt nach TMDb-Auswahl) */}
-        {posterUrl && (
-          <div className="mt-2 flex justify-center transition-all animate-fade-in">
-            <img
-              src={posterUrl}
-              alt="Poster Preview"
-              className="rounded shadow max-h-64"
-              style={{ maxWidth: '180px', objectFit: 'contain' }}
-            />
-          </div>
-        )}
       </div>
+
+      {/* Poster Preview (außerhalb des relative container) */}
+      {posterUrl && (
+        <div className="mt-2 flex justify-center transition-all animate-fade-in">
+          <img
+            src={posterUrl}
+            alt="Poster Preview"
+            className="rounded shadow max-h-64"
+            style={{ maxWidth: '180px', objectFit: 'contain' }}
+          />
+        </div>
+      )}
 
 
 
