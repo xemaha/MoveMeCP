@@ -41,6 +41,11 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
     setShowTmdbSuggestions(false)
     setShowBookSuggestions(false)
     
+    // Blur title input to remove focus and prevent dropdown reopening
+    if (titleInputRef.current) {
+      titleInputRef.current.blur()
+    }
+    
     setTitle(book.title);
     setDescription(book.description);
     setYear(book.publishedDate ? book.publishedDate.slice(0, 4) : '');
@@ -242,6 +247,11 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
     // Close dropdowns immediately
     setShowTmdbSuggestions(false)
     setShowBookSuggestions(false)
+    
+    // Blur title input to remove focus and prevent dropdown reopening
+    if (titleInputRef.current) {
+      titleInputRef.current.blur()
+    }
     
     setTitle(tmdb.title || tmdb.name || '');
     const yearStr = tmdb.release_date || tmdb.first_air_date || '';
