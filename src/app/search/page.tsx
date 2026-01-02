@@ -38,7 +38,7 @@ function SearchContent() {
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <MovieList hideRecommendations contentTypeFilter={contentTypes} />
+          <MovieList hideRecommendations showPredictions={true} contentTypeFilter={contentTypes} />
         </div>
       </main>
     </div>

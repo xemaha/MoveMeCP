@@ -27,7 +27,7 @@ interface UserProviderProfile {
 
 function WatchlistContent() {
   const { user, isLoading } = useUser()
-  const [showPredictions, setShowPredictions] = useState(false)
+  const [showPredictions, setShowPredictions] = useState(true)
   const [contentTypes, setContentTypes] = useState({
     film: true,
     serie: true,

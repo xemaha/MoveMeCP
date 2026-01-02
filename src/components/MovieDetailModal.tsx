@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { supabase, Movie, Tag } from "@/lib/supabase";
 import { useUser } from "@/lib/UserContext";
 import { WatchProvidersDisplay } from "./WatchProvidersDisplay";
+import { RecommendModal } from "./RecommendModal";
+import { WhatsAppSuccessModal } from "./WhatsAppSuccessModal";
 
 interface MovieWithDetails extends Movie {
   tags: Tag[];
@@ -45,6 +47,11 @@ export function MovieDetailModal({
   const [isLoading, setIsLoading] = useState(false);
   const [showAllTags, setShowAllTags] = useState(false);
   const { user } = useUser();
+  
+  // Recommend modal state
+  const [showRecommendModal, setShowRecommendModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppRecipients, setWhatsAppRecipients] = useState<string[]>([]);
 
   const hasDetails = !!(movie.poster_url || movie.director || movie.actor || movie.year);
 
@@ -522,6 +529,17 @@ export function MovieDetailModal({
     }
   }
 
+  const handleRecommendSuccess = (recipients: string[]) => {
+    setShowRecommendModal(false)
+    setWhatsAppRecipients(recipients)
+    setShowWhatsAppModal(true)
+  }
+
+  const handleWhatsAppModalClose = () => {
+    setShowWhatsAppModal(false)
+    setWhatsAppRecipients([])
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -555,8 +573,8 @@ export function MovieDetailModal({
               </div>
             )}
             {/* YouTube Trailer Button */}
-            {movie.trailer_url && (
-              <div className="flex justify-center mb-4">
+            <div className="flex justify-center gap-3 mb-4 flex-wrap">
+              {movie.trailer_url && (
                 <a
                   href={movie.trailer_url}
                   target="_blank"
@@ -566,8 +584,20 @@ export function MovieDetailModal({
                   <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path d="M23.498 6.186a2.994 2.994 0 0 0-2.107-2.117C19.228 3.5 12 3.5 12 3.5s-7.228 0-9.391.569A2.994 2.994 0 0 0 .502 6.186C0 8.36 0 12 0 12s0 3.64.502 5.814a2.994 2.994 0 0 0 2.107 2.117C4.772 20.5 12 20.5 12 20.5s7.228 0 9.391-.569a2.994 2.994 0 0 0 2.107-2.117C24 15.64 24 12 24 12s0-3.64-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                   YouTube Trailer
                 </a>
-              </div>
-            )}
+              )}
+              {user && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowRecommendModal(true)
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium gap-2"
+                >
+                  <span>↗️</span>
+                  Empfehlen
+                </button>
+              )}
+            </div>
             
             {/* Watch Providers */}
             {watchProviders && (
@@ -870,6 +900,25 @@ export function MovieDetailModal({
               </div>
             </div>
           )}
+
+      {/* Recommendation Modal */}
+      {showRecommendModal && user && (
+        <RecommendModal
+          movie={movie}
+          currentUserId={user.id}
+          onSuccess={handleRecommendSuccess}
+          onClose={() => setShowRecommendModal(false)}
+        />
+      )}
+
+      {/* WhatsApp Success Modal */}
+      {showWhatsAppModal && (
+        <WhatsAppSuccessModal
+          movie={movie}
+          recipients={whatsAppRecipients}
+          onClose={handleWhatsAppModalClose}
+        />
+      )}
         </div>
       </div>
     </div>

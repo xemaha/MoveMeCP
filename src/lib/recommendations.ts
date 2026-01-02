@@ -24,6 +24,8 @@ interface Recommendation {
   predictedRating: number
   basedOnUsers: string[]
   tagBoost: number
+  mostSimilarUserName?: string
+  mostSimilarUserRating?: number
 }
 
 /**
@@ -314,6 +316,8 @@ export function generateRecommendations(
     let weightedSum = 0
     let weightSum = 0
     const contributingUsers: string[] = []
+    let mostSimilarUser: UserSimilarity | undefined
+    let mostSimilarUserRating: number | undefined
 
     for (const similarUser of similarUsers) {
       const rating = movie.ratings.find(r => r.user_name === similarUser.userName)
@@ -321,6 +325,12 @@ export function generateRecommendations(
         weightedSum += rating.rating * similarUser.similarity
         weightSum += similarUser.similarity
         contributingUsers.push(similarUser.userName)
+        
+        // Track the most similar user who rated this movie
+        if (!mostSimilarUser || similarUser.similarity > mostSimilarUser.similarity) {
+          mostSimilarUser = similarUser
+          mostSimilarUserRating = rating.rating
+        }
       }
     }
 
@@ -356,7 +366,9 @@ export function generateRecommendations(
           movie,
           predictedRating: finalRating,
           basedOnUsers: contributingUsers.slice(0, 3), // Top 3 contributors
-          tagBoost
+          tagBoost,
+          mostSimilarUserName: mostSimilarUser?.userName,
+          mostSimilarUserRating
         })
       }
     }

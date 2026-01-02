@@ -6,6 +6,7 @@ import { UserHeader } from '@/components/UserHeader'
 import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieList } from '@/components/MovieList'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
+import { RecommendationSourceFilter } from '@/components/RecommendationSourceFilter'
 import { useState } from 'react'
 
 function RecommendationsContent() {
@@ -15,6 +16,7 @@ function RecommendationsContent() {
     serie: true,
     buch: false
   })
+  const [recommendationSource, setRecommendationSource] = useState<'all' | 'ai' | 'personal'>('all')
 
   if (isLoading) {
     return (
@@ -36,9 +38,16 @@ function RecommendationsContent() {
       <UserHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
+        
+        <RecommendationSourceFilter selected={recommendationSource} onChange={setRecommendationSource} />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <MovieList defaultShowRecommendations showOnlyRecommendations contentTypeFilter={contentTypes} />
+          <MovieList 
+            defaultShowRecommendations 
+            showOnlyRecommendations 
+            contentTypeFilter={contentTypes}
+            recommendationSourceFilter={recommendationSource}
+          />
         </div>
       </main>
     </div>

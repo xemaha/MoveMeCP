@@ -5,8 +5,11 @@ import { Range } from 'react-range'
 import { supabase, Movie, Tag } from '@/lib/supabase'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { WatchProvidersDisplay } from '@/components/WatchProvidersDisplay'
+import { RecommendModal } from '@/components/RecommendModal'
+import { WhatsAppSuccessModal } from '@/components/WhatsAppSuccessModal'
 import { useUser } from '@/lib/UserContext'
 import { generateRecommendations, findSimilarUsers, calculatePredictedRatings } from '@/lib/recommendations'
+import { loadPersonalRecommendations, mergeRecommendations } from '@/lib/personalRecommendations'
 
 // Types
 interface Rating {
@@ -65,6 +68,7 @@ interface MovieListProps {
     buy: boolean
     unavailable: boolean
   }
+  recommendationSourceFilter?: 'all' | 'ai' | 'personal'
 }
 
 // Tag display component
@@ -104,7 +108,7 @@ const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
 }
 
 export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile, providerTypeFilter } = props || {}
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile, providerTypeFilter, recommendationSourceFilter = 'all' } = props || {}
   const { user } = useUser()
   
   // Core state
@@ -147,6 +151,16 @@ export function MovieList(props?: MovieListProps) {
   const [predictedRatings, setPredictedRatings] = useState<Map<string, number>>(new Map())
   const hasAutoCalcRecs = useRef(false)
   const [movieProviders, setMovieProviders] = useState<Map<string, any>>(new Map()) // movieId -> provider data
+  
+  // Recommend modal state
+  const [recommendModalMovie, setRecommendModalMovie] = useState<EnhancedMovie | null>(null)
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
+  const [whatsAppRecipients, setWhatsAppRecipients] = useState<string[]>([])
+  const [whatsAppMovie, setWhatsAppMovie] = useState<EnhancedMovie | null>(null)
+  
+  // Personal recommendations state
+  const [personalRecommendations, setPersonalRecommendations] = useState<any[]>([])
+  const [mergedRecommendations, setMergedRecommendations] = useState<any[]>([])
 
   // Initialize data
   useEffect(() => {
@@ -569,6 +583,27 @@ export function MovieList(props?: MovieListProps) {
     }
   }
 
+  const handleRecommendClick = (movie: EnhancedMovie) => {
+    if (!user) {
+      alert('Du musst eingeloggt sein!')
+      return
+    }
+    setRecommendModalMovie(movie)
+  }
+
+  const handleRecommendSuccess = (recipients: string[]) => {
+    setRecommendModalMovie(null)
+    setWhatsAppRecipients(recipients)
+    setWhatsAppMovie(recommendModalMovie)
+    setShowWhatsAppModal(true)
+  }
+
+  const handleWhatsAppModalClose = () => {
+    setShowWhatsAppModal(false)
+    setWhatsAppRecipients([])
+    setWhatsAppMovie(null)
+  }
+
   // Filter logic
   const filteredMovies = movies.filter(movie => {
     // Ensure movie has valid id
@@ -780,21 +815,34 @@ export function MovieList(props?: MovieListProps) {
       }))
   }
 
-  const handleCalculateRecommendations = () => {
+  const handleCalculateRecommendations = async () => {
     if (!user) return
     
     setIsCalculatingRecommendations(true)
     
-    // Calculate recommendations
-    const recs = generateRecommendations(user.id, movies, 20)
-    setRecommendations(recs)
-    
-    // Calculate predicted ratings for all movies
-    const predictions = calculatePredictedRatings(user.id, movies)
-    setPredictedRatings(predictions)
-    
-    setShowRecommendations(true)
-    setIsCalculatingRecommendations(false)
+    try {
+      // Calculate AI recommendations
+      const recs = generateRecommendations(user.id, movies, 20)
+      
+      // Load personal recommendations
+      const personalRecs = await loadPersonalRecommendations(user.id)
+      setPersonalRecommendations(personalRecs)
+      
+      // Merge recommendations with source info
+      const merged = mergeRecommendations(recs, personalRecs, movies)
+      setMergedRecommendations(merged)
+      setRecommendations(merged)
+      
+      // Calculate predicted ratings for all movies
+      const predictions = calculatePredictedRatings(user.id, movies)
+      setPredictedRatings(predictions)
+      
+      setShowRecommendations(true)
+    } catch (error) {
+      console.error('Error calculating recommendations:', error)
+    } finally {
+      setIsCalculatingRecommendations(false)
+    }
   }
 
   if (isLoading) {
@@ -831,6 +879,10 @@ export function MovieList(props?: MovieListProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {recommendations
                     .filter(rec => {
+                      // Filter by source
+                      if (recommendationSourceFilter === 'ai' && rec.source !== 'ai') return false
+                      if (recommendationSourceFilter === 'personal' && rec.source !== 'personal') return false
+                      
                       const typeFilter = contentTypeFilter || filters.contentTypes
                       const contentType = rec.movie.content_type?.toLowerCase()
                       if (contentType === 'film') return typeFilter.film
@@ -841,11 +893,12 @@ export function MovieList(props?: MovieListProps) {
                     .map((rec) => (
                       <div
                         key={rec.movie.id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-green-200"
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
                       >
                         <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
+                          {/* Poster */}
                           {rec.movie.poster_url ? (
-                            <div className="w-full h-40 overflow-hidden">
+                            <div className="w-full h-60 overflow-hidden">
                               <img
                                 src={rec.movie.poster_url}
                                 alt={rec.movie.title}
@@ -853,34 +906,126 @@ export function MovieList(props?: MovieListProps) {
                               />
                             </div>
                           ) : (
-                            <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                            <div className="w-full h-60 bg-gray-200 flex items-center justify-center text-gray-400 text-5xl">
                               🎬
                             </div>
                           )}
-                          <div className="p-3">
-                            <h4 className="font-semibold text-sm text-gray-900 truncate mb-2">
-                              {rec.movie.title}
-                            </h4>
-                            <div className="flex flex-col gap-1">
-                              <div className="text-center">
-                                <div className="text-green-700 font-bold text-lg mb-1">
-                                  {Math.round((rec.predictedRating / 5) * 100)}% Match
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                  Basierend auf Nutzern mit ähnlichem Geschmack
-                                </div>
-                              </div>
-                              {rec.movie.content_type && (
-                                <span className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full uppercase">
-                                  {rec.movie.content_type}
+                          
+                          <div className="p-4">
+                            {/* Title and Source Badge */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
+                                {rec.movie.title}
+                              </h3>
+                              {rec.source === 'personal' ? (
+                                <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                  👥 {rec.recommenders?.join(', ')}
+                                </span>
+                              ) : (
+                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                  🤖 KI
                                 </span>
                               )}
-                              {rec.movie.description && (
-                                <p className="text-xs text-gray-600 line-clamp-2">{rec.movie.description}</p>
-                              )}
                             </div>
+                            
+                            {/* Predicted Match - only show for AI recommendations */}
+                            {rec.source === 'ai' && rec.predictedRating > 0 && (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
+                                <span className="text-xs text-green-700 font-medium">
+                                  Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Most similar user info */}
+                            {rec.mostSimilarUserName && rec.mostSimilarUserRating && (
+                              <div className="text-xs text-gray-500 mb-2">
+                                {rec.mostSimilarUserName} hat bewertet:
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-sm ${
+                                        star <= rec.mostSimilarUserRating! ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  <span className="text-gray-600 ml-1">{rec.mostSimilarUserRating}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Description */}
+                            {rec.movie.description && (
+                              <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                                {rec.movie.description}
+                              </p>
+                            )}
+
+                            {/* YouTube Trailer Button */}
+                            {rec.movie.trailer_url && (
+                              <div className="mb-3">
+                                <a
+                                  href={rec.movie.trailer_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs font-medium gap-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  🎬 Trailer ansehen
+                                </a>
+                              </div>
+                            )}
+
+                            {/* Tags */}
+                            {rec.movie.tags.length > 0 && (
+                              <TagDisplay tags={rec.movie.tags} />
+                            )}
+
+                            {/* Average Rating */}
+                            {rec.movie.averageRating > 0 && (
+                              <div className="flex items-center mb-3">
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-lg ${
+                                        star <= rec.movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="text-sm text-gray-600 ml-2">
+                                  {rec.movie.averageRating.toFixed(1)} ({rec.movie.ratingCount} Bewertungen)
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
+
+                        {/* User actions */}
+                        {user && (
+                          <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
+                            {/* Watchlist button */}
+                            <button
+                              onClick={() => handleWatchlistToggle(rec.movie.id)}
+                              className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                watchlistMovies.has(rec.movie.id)
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              <span>{watchlistMovies.has(rec.movie.id) ? '👁️' : '👁️‍🗨️'}</span>
+                              <span>
+                                {watchlistMovies.has(rec.movie.id) ? 'Auf Watchlist' : 'Zur Watchlist'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -931,11 +1076,12 @@ export function MovieList(props?: MovieListProps) {
                     .map((rec) => (
                       <div
                         key={rec.movie.id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-green-300"
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
                       >
                         <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
+                          {/* Poster */}
                           {rec.movie.poster_url ? (
-                            <div className="w-full h-40 overflow-hidden">
+                            <div className="w-full h-60 overflow-hidden">
                               <img
                                 src={rec.movie.poster_url}
                                 alt={rec.movie.title}
@@ -943,43 +1089,111 @@ export function MovieList(props?: MovieListProps) {
                               />
                             </div>
                           ) : (
-                            <div className="w-full h-40 bg-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                            <div className="w-full h-60 bg-gray-200 flex items-center justify-center text-gray-400 text-5xl">
                               🎬
                             </div>
                           )}
-                          <div className="p-3">
-                            <h4 className="font-semibold text-sm text-gray-900 truncate mb-2">
-                              {rec.movie.title}
-                            </h4>
-                            <div className="flex flex-col gap-1">
-                              <div className="text-center">
-                                <div className="text-green-700 font-bold text-lg mb-1">
-                                  {Math.round((rec.predictedRating / 5) * 100)}% Match
-                                </div>
-                                <div className="flex items-center justify-center text-xs text-gray-600">
-                                  <span className="text-yellow-400 mr-1">★</span>
-                                  <span>Ø {rec.movie.averageRating.toFixed(1)}</span>
+                          
+                          <div className="p-4">
+                            {/* Title and type */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
+                                {rec.movie.title}
+                              </h3>
+                            </div>
+                            
+                            {/* Predicted Match */}
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
+                              <span className="text-xs text-green-700 font-medium">
+                                Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
+                              </span>
+                            </div>
+                            
+                            {/* Most similar user info */}
+                            {rec.mostSimilarUserName && rec.mostSimilarUserRating && (
+                              <div className="text-xs text-gray-500 mb-2">
+                                {rec.mostSimilarUserName} hat bewertet:
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-sm ${
+                                        star <= rec.mostSimilarUserRating! ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  <span className="text-gray-600 ml-1">{rec.mostSimilarUserRating}</span>
                                 </div>
                               </div>
+                            )}
+                            
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                                {rec.movie.content_type === 'film' ? '🎬' : 
+                                 rec.movie.content_type === 'serie' ? '📺' : '📚'} 
+                                {rec.movie.content_type}
+                              </span>
+                              {rec.movie.created_by && (
+                                <span className="text-xs text-gray-500">von {rec.movie.created_by}</span>
+                              )}
                             </div>
+
+                            {/* Description */}
+                            {rec.movie.description && (
+                              <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                                {rec.movie.description}
+                              </p>
+                            )}
+
+                            {/* Tags */}
+                            {rec.movie.tags.length > 0 && (
+                              <TagDisplay tags={rec.movie.tags} />
+                            )}
+
+                            {/* Average Rating */}
+                            {rec.movie.averageRating > 0 && (
+                              <div className="flex items-center mb-3">
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-lg ${
+                                        star <= rec.movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="text-sm text-gray-600 ml-2">
+                                  {rec.movie.averageRating.toFixed(1)} ({rec.movie.ratingCount} Bewertungen)
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="px-3 pb-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleWatchlistToggle(rec.movie.id)
-                            }}
-                            className={`w-full mt-2 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              watchlistMovies.has(rec.movie.id)
-                                ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                            }`}
-                          >
-                            <span>{watchlistMovies.has(rec.movie.id) ? '👁️' : '👁️‍🗨️'}</span>
-                            <span>{watchlistMovies.has(rec.movie.id) ? 'Auf Watchlist' : 'Zur Watchlist'}</span>
-                          </button>
-                        </div>
+
+                        {/* User actions */}
+                        {user && (
+                          <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
+                            {/* Watchlist button */}
+                            <button
+                              onClick={() => handleWatchlistToggle(rec.movie.id)}
+                              className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                watchlistMovies.has(rec.movie.id)
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              <span>{watchlistMovies.has(rec.movie.id) ? '👁️' : '👁️‍🗨️'}</span>
+                              <span>
+                                {watchlistMovies.has(rec.movie.id) ? 'Auf Watchlist' : 'Zur Watchlist'}
+                              </span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -1324,7 +1538,18 @@ export function MovieList(props?: MovieListProps) {
                     <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
                       {movie.title}
                     </h3>
-                    <span className="text-gray-400">✏️</span>
+                    {user && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRecommendClick(movie)
+                        }}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Film empfehlen"
+                      >
+                        ↗️
+                      </button>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-2 mb-2">
@@ -1385,6 +1610,15 @@ export function MovieList(props?: MovieListProps) {
                       </span>
                     </div>
                   )}
+
+                  {/* Predicted Match - show if available and user hasn't rated yet */}
+                  {showPredictions && predictedRatings.has(movie.id) && !movie.ratings.some(r => r.user_id === user?.id) && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                      <span className="text-xs text-green-700 font-medium">
+                        Wird dir mit {Math.round((predictedRatings.get(movie.id)! / 5) * 100)}% Wahrscheinlichkeit gefallen
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1395,11 +1629,6 @@ export function MovieList(props?: MovieListProps) {
                     <h4 className="text-sm font-medium text-gray-700">
                       Deine Bewertung:
                     </h4>
-                    {predictedRatings.has(movie.id) && (
-                      <span className="text-green-600 font-semibold text-sm">
-                        {Math.round((predictedRatings.get(movie.id)! / 5) * 100)}% Match
-                      </span>
-                    )}
                   </div>
                   
                   {/* Star rating */}
@@ -1535,6 +1764,25 @@ export function MovieList(props?: MovieListProps) {
             setSelectedMovie(null)
           }}
           hideWatchlistFeature={true}
+        />
+      )}
+
+      {/* Recommend Modal */}
+      {recommendModalMovie && user && (
+        <RecommendModal
+          movie={recommendModalMovie}
+          currentUserId={user.id}
+          onClose={() => setRecommendModalMovie(null)}
+          onSuccess={handleRecommendSuccess}
+        />
+      )}
+
+      {/* WhatsApp Success Modal */}
+      {showWhatsAppModal && whatsAppMovie && (
+        <WhatsAppSuccessModal
+          movie={whatsAppMovie}
+          recipients={whatsAppRecipients}
+          onClose={handleWhatsAppModalClose}
         />
       )}
     </div>
