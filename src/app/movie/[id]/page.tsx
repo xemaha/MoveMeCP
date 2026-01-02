@@ -32,10 +32,18 @@ export default function MoviePage() {
       setIsLoading(true)
       setError(null)
 
+      const rawId = params?.id
+      const movieId = Array.isArray(rawId) ? rawId[0] : rawId
+      if (!movieId) {
+        setError('Film-ID fehlt')
+        setIsLoading(false)
+        return
+      }
+
       const { data, error: fetchError } = await supabase
         .from('movies')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', movieId)
         .single()
 
       if (fetchError) {
