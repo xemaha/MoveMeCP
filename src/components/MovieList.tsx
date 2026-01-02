@@ -179,11 +179,15 @@ export function MovieList(props?: MovieListProps) {
         .select('movie_id')
         .eq('user_id', user.id)
       
-      if (error) throw error
+      if (error) {
+        console.error('Error loading dismissed recommendations:', error)
+        return
+      }
       
       if (data) {
         const movieIds = data.map(item => item.movie_id)
         setDismissedRecommendationIds(new Set(movieIds))
+        console.log('Loaded', movieIds.length, 'dismissed recommendations')
       }
     } catch (err) {
       console.error('Error loading dismissed recommendations', err)
@@ -471,27 +475,52 @@ export function MovieList(props?: MovieListProps) {
     }
 
     try {
+      // Load all personal recommendations for this user
       const { data, error } = await supabase
         .from('personal_recommendations')
-        .select('movie_id, from_user_id, user_profiles!personal_recommendations_from_user_id_fkey(name)')
+        .select('movie_id, from_user_id')
         .eq('to_user_id', user.id)
 
-      if (error) throw error
+      if (error) {
+        console.error('Error loading personal recommendations:', error)
+        return
+      }
 
-      const recommenderMap = new Map<string, string[]>()
-      if (data) {
-        data.forEach((rec: any) => {
-          const movieId = rec.movie_id
-          const fromUserName = rec.user_profiles?.name || rec.from_user_id
-          
-          if (!recommenderMap.has(movieId)) {
-            recommenderMap.set(movieId, [])
-          }
-          recommenderMap.get(movieId)!.push(fromUserName)
+      if (!data || data.length === 0) {
+        setMovieRecommenders(new Map())
+        return
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(data.map((rec: any) => rec.from_user_id))]
+      
+      // Load user profiles for these IDs
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('id, name')
+        .in('id', userIds)
+
+      const userIdToName = new Map<string, string>()
+      if (profiles && !profilesError) {
+        profiles.forEach((profile: any) => {
+          userIdToName.set(profile.id, profile.name || profile.id)
         })
       }
+
+      // Build recommender map
+      const recommenderMap = new Map<string, string[]>()
+      data.forEach((rec: any) => {
+        const movieId = rec.movie_id
+        const fromUserName = userIdToName.get(rec.from_user_id) || rec.from_user_id
+        
+        if (!recommenderMap.has(movieId)) {
+          recommenderMap.set(movieId, [])
+        }
+        recommenderMap.get(movieId)!.push(fromUserName)
+      })
       
       setMovieRecommenders(recommenderMap)
+      console.log('Loaded personal recommendations for', recommenderMap.size, 'movies')
     } catch (error) {
       console.error('Error loading personal recommendations:', error)
     }
@@ -671,6 +700,13 @@ export function MovieList(props?: MovieListProps) {
         }
 
         setPersonalRecommendations(prev => prev.filter((item: any) => item.movie_id !== movieId))
+        
+        // Update movieRecommenders map to remove this movie
+        setMovieRecommenders(prev => {
+          const next = new Map(prev)
+          next.delete(movieId)
+          return next
+        })
       }
 
       // Add to dismissed list in Supabase
@@ -681,13 +717,14 @@ export function MovieList(props?: MovieListProps) {
       
       if (dismissError && !dismissError.message.includes('duplicate')) {
         console.error('Error saving dismissed recommendation:', dismissError)
+        alert('Konnte Empfehlung nicht als verworfen speichern')
+        return
       }
 
-      setDismissedRecommendationIds(prev => {
-        const next = new Set(prev)
-        next.add(movieId)
-        return next
-      })
+      const newDismissedIds = new Set(dismissedRecommendationIds)
+      newDismissedIds.add(movieId)
+      setDismissedRecommendationIds(newDismissedIds)
+      console.log('Dismissed recommendation saved to Supabase')
 
       setMergedRecommendations(prev => prev.filter(item => item.movie.id !== movieId))
       setRecommendations(prev => prev.filter(item => item.movie.id !== movieId))
