@@ -26,7 +26,43 @@ interface ProviderFilterProps {
 export function ProviderFilter({ availableProviders, isLoading, filter, onChange }: ProviderFilterProps) {
   const [showProviderFilter, setShowProviderFilter] = useState(false)
 
-  console.log('ProviderFilter render - availableProviders:', availableProviders.length, 'isLoading:', isLoading)
+  // Custom logos for providers
+  const YOUTUBE_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80' viewBox='0 0 120 80'><rect width='120' height='80' rx='12' fill='%23ff0000'/><polygon points='50,25 85,40 50,55' fill='white'/></svg>"
+  const WOW_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='80' viewBox='0 0 140 80'><rect width='140' height='80' rx='12' fill='%2300153f'/><text x='70' y='50' text-anchor='middle' font-family='Arial' font-size='36' font-weight='700' fill='white'>WOW</text></svg>"
+
+  // Normalize providers: merge Sky/WOW variants and add custom logos
+  const normalizedProviders = availableProviders.reduce((acc, provider) => {
+    const lower = provider.provider_name.toLowerCase()
+    
+    // Map any Sky/WOW variant to WOW
+    if (lower.includes('sky') || lower.includes('wow')) {
+      const existing = acc.find(p => p.provider_id === 9999) // Use fixed ID for WOW
+      if (!existing) {
+        acc.push({
+          provider_id: 9999,
+          provider_name: 'WOW',
+          logo_path: '', // Will use custom logo
+          customLogo: WOW_LOGO
+        })
+      }
+      return acc
+    }
+    
+    // Map YouTube to custom logo
+    if (lower.includes('youtube')) {
+      acc.push({
+        ...provider,
+        customLogo: YOUTUBE_LOGO
+      })
+      return acc
+    }
+    
+    // Keep other providers as-is
+    acc.push(provider)
+    return acc
+  }, [] as (Provider & { customLogo?: string })[])
+
+  console.log('ProviderFilter render - normalizedProviders:', normalizedProviders.length, 'isLoading:', isLoading)
 
   const toggleProvider = (providerId: number) => {
     const newProviders = new Set(filter.providers)
@@ -50,7 +86,7 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
     } else {
       newProviders.add(providerId)
       // If all providers are now selected, clear the set (= show all)
-      if (newProviders.size === availableProviders.length) {
+      if (newProviders.size === normalizedProviders.length) {
         onChange({ ...filter, providers: new Set() })
       } else {
         onChange({ ...filter, providers: newProviders })
@@ -149,7 +185,7 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-gray-700">Anbieter:</p>
-              {availableProviders.length > 0 && (
+              {normalizedProviders.length > 0 && (
                 <button
                   onClick={toggleAllProviders}
                   className="text-xs text-blue-600 hover:text-blue-800 underline"
@@ -161,17 +197,17 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
             
             {isLoading ? (
               <div className="text-sm text-gray-500">Lade Anbieter...</div>
-            ) : availableProviders.length === 0 ? (
+            ) : normalizedProviders.length === 0 ? (
               <div className="text-sm text-gray-500">Keine Anbieter gefunden</div>
             ) : (
               <>
                 <p className="text-xs text-gray-500 mb-3">
                   {filter.providers.size === 0 
                     ? 'Alle Anbieter ausgewählt' 
-                    : `${filter.providers.size} von ${availableProviders.length} Anbietern ausgewählt`}
+                    : `${filter.providers.size} von ${normalizedProviders.length} Anbietern ausgewählt`}
                 </p>
                 <div className="flex flex-wrap gap-3">
-                  {availableProviders.map((provider) => (
+                  {normalizedProviders.map((provider) => (
                     <button
                       key={provider.provider_id}
                       onClick={() => toggleProvider(provider.provider_id)}
@@ -182,15 +218,27 @@ export function ProviderFilter({ availableProviders, isLoading, filter, onChange
                       }`}
                       title={provider.provider_name}
                     >
-                      <img
-                        src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
-                        alt={provider.provider_name}
-                        className={`w-12 h-12 rounded-lg border-2 transition-all ${
-                          isProviderSelected(provider.provider_id)
-                            ? 'border-blue-500'
-                            : 'border-gray-300'
-                        }`}
-                      />
+                      {provider.customLogo ? (
+                        <img
+                          src={provider.customLogo}
+                          alt={provider.provider_name}
+                          className={`w-12 h-12 rounded-lg border-2 transition-all bg-white object-contain ${
+                            isProviderSelected(provider.provider_id)
+                              ? 'border-blue-500'
+                              : 'border-gray-300'
+                          }`}
+                        />
+                      ) : (
+                        <img
+                          src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
+                          alt={provider.provider_name}
+                          className={`w-12 h-12 rounded-lg border-2 transition-all ${
+                            isProviderSelected(provider.provider_id)
+                              ? 'border-blue-500'
+                              : 'border-gray-300'
+                          }`}
+                        />
+                      )}
                       {isProviderSelected(provider.provider_id) && (
                         <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs">
                           ✓
