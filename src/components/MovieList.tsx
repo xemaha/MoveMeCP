@@ -577,6 +577,47 @@ export function MovieList(props?: MovieListProps) {
 
         setWatchlistMovies(prev => new Set(prev).add(movieId))
       }
+
+      // Remove a personal recommendation from current user's profile
+      const handleRemovePersonalRecommendation = async (movieId: string) => {
+        if (!user) return
+
+        try {
+          const { error } = await supabase
+            .from('personal_recommendations')
+            .delete()
+            .eq('movie_id', movieId)
+            .eq('to_user_id', user.id)
+
+          if (error) {
+            console.error('Error deleting personal recommendation:', error)
+            alert('Konnte Empfehlung nicht löschen')
+            return
+          }
+
+          // Update local states: remove personal entries and strip personal flags from AI items
+          setPersonalRecommendations(prev => prev.filter((rec: any) => rec.movie_id !== movieId))
+
+          setMergedRecommendations(prev => prev
+            .map(rec => {
+              if (rec.movie.id !== movieId) return rec
+              if (rec.source === 'personal') return null
+              return { ...rec, isPersonal: false, recommenders: [] }
+            })
+            .filter(Boolean) as any[])
+
+          setRecommendations(prev => prev
+            .map(rec => {
+              if (rec.movie.id !== movieId) return rec
+              if (rec.source === 'personal') return null
+              return { ...rec, isPersonal: false, recommenders: [] }
+            })
+            .filter(Boolean) as any[])
+        } catch (err) {
+          console.error('Error deleting personal recommendation:', err)
+          alert('Konnte Empfehlung nicht löschen')
+        }
+      }
     } catch (error: any) {
       console.error('Error handling watchlist:', error)
       alert(`Fehler: ${error.message}`)
@@ -911,16 +952,30 @@ export function MovieList(props?: MovieListProps) {
                             </div>
                           )}
                           
-                          <div className="p-4">
+                            <div className="p-4">
                             {/* Title and Source Badge */}
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
                                 {rec.movie.title}
                               </h3>
                               {rec.source === 'personal' ? (
-                                <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                                  👥 {rec.recommenders?.join(', ')}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                    👥 {rec.recommenders?.join(', ')}
+                                  </span>
+                                  {user && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleRemovePersonalRecommendation(rec.movie.id)
+                                      }}
+                                      className="w-7 h-7 inline-flex items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 text-xs font-bold"
+                                      title="Empfehlung entfernen"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
                                   🤖 KI
