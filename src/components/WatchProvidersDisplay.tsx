@@ -8,6 +8,53 @@ interface WatchProvidersDisplayProps {
 }
 
 export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersDisplayProps) {
+  // Custom inline logos for providers that often lack TMDB logos
+  const YOUTUBE_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80' viewBox='0 0 120 80'><rect width='120' height='80' rx='12' fill='%23ff0000'/><polygon points='50,25 85,40 50,55' fill='white'/></svg>"
+  const WOW_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='80' viewBox='0 0 140 80'><rect width='140' height='80' rx='12' fill='%2300153f'/><text x='70' y='50' text-anchor='middle' font-family='Arial' font-size='36' font-weight='700' fill='white'>WOW</text></svg>"
+
+  const normalizeProvider = (provider: any) => {
+    const name = (provider.provider_name || '').trim()
+    const lower = name.toLowerCase()
+
+    // Map any Sky/WOW variant to WOW with a custom logo
+    if (/(\bsky\b|\bwow\b)/i.test(name)) {
+      return {
+        ...provider,
+        provider_id: 'custom-wow',
+        provider_name: 'WOW',
+        customLogo: WOW_LOGO,
+        canonicalKey: 'custom-wow',
+      }
+    }
+
+    // Map YouTube to a custom logo when TMDB logo is missing
+    if (lower.includes('youtube')) {
+      return {
+        ...provider,
+        provider_id: 'custom-youtube',
+        provider_name: 'YouTube',
+        customLogo: YOUTUBE_LOGO,
+        canonicalKey: 'custom-youtube',
+      }
+    }
+
+    return {
+      ...provider,
+      canonicalKey: `tmdb-${provider.provider_id}`,
+    }
+  }
+
+  const normalizeList = (list: any[]) => {
+    const map = new Map<string, any>()
+    list.forEach((p) => {
+      const normalized = normalizeProvider(p)
+      if (!map.has(normalized.canonicalKey)) {
+        map.set(normalized.canonicalKey, normalized)
+      }
+    })
+    return Array.from(map.values())
+  }
+
   if (!movie.watch_providers) {
     return null
   }
@@ -19,18 +66,15 @@ export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersD
     return null
   }
 
-  // Sammle Provider nach Typ
-  const flatrateProviders = countryData.flatrate || []
-  const rentProviders = countryData.rent || []
-  const buyProviders = countryData.buy || []
+  // Sammle Provider nach Typ (normalisiert & dedupliziert inkl. Sky/WOW mapping)
+  const flatrateProviders = normalizeList(countryData.flatrate || [])
+  const rentProviders = normalizeList(countryData.rent || [])
+  const buyProviders = normalizeList(countryData.buy || [])
 
-  // Dedupliziere alle Provider
-  const allProviders = [...flatrateProviders, ...rentProviders, ...buyProviders]
-  const uniqueProviders = Array.from(
-    new Map(allProviders.map(p => [p.provider_id, p])).values()
-  )
+  // Dedupliziere über alle Typen hinweg
+  const allProviders = normalizeList([...flatrateProviders, ...rentProviders, ...buyProviders])
 
-  if (uniqueProviders.length === 0) {
+  if (allProviders.length === 0) {
     return null
   }
 
@@ -53,7 +97,13 @@ export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersD
               className="relative group"
               onClick={(e) => e.stopPropagation()}
             >
-              {provider.logo_path ? (
+              {provider.customLogo ? (
+                <img
+                  src={provider.customLogo}
+                  alt={provider.provider_name}
+                  className={`${iconSize} rounded-lg border-2 border-gray-300 hover:border-blue-500 transition-all hover:scale-110 shadow-sm bg-white object-contain`}
+                />
+              ) : provider.logo_path ? (
                 <img
                   src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
                   alt={provider.provider_name}
