@@ -100,9 +100,6 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
   // Ref for title input to blur after submit
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  // Ref for title input to blur after submit
-  const titleInputRef = useRef<HTMLInputElement>(null)
-
   // Autocomplete für Filme (Supabase + TMDb)
   // Click outside ref for TMDb dropdown
   const tmdbDropdownRef = useRef<HTMLDivElement>(null);
