@@ -31,9 +31,10 @@ interface AddMovieFormProps {
     serie: boolean
     buch: boolean
   }
+  onMovieAdded?: (movieId: string) => void
 }
 
-export default function AddMovieForm({ selectedContentType }: AddMovieFormProps) {
+export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddMovieFormProps) {
   // Handler für Google Books Auswahl
   const handleBookSuggestionClick = (book: any) => {
     setTitle(book.title);
@@ -553,12 +554,24 @@ export default function AddMovieForm({ selectedContentType }: AddMovieFormProps)
       setSuggestions([])
       setShowSuggestions(false)
       setTmdbSelected(false)
+      setPosterUrl('')
+      setDirector('')
+      setActor('')
+      setYear('')
+      setGenre('')
+      setTrailerUrl('')
       
-      // Wait a bit before refreshing to ensure database operations are complete
-      console.log('🎬 Film erfolgreich hinzugefügt, lade Seite neu...')
-      setTimeout(() => {
-        window.location.reload()
-      }, 500) // Wait 500ms before reload
+      // Call the callback with the movie ID instead of reloading
+      if (onMovieAdded && movieId) {
+        console.log('🎬 Film erfolgreich hinzugefügt, öffne Detail-Modal...')
+        onMovieAdded(movieId)
+      } else {
+        // Fallback: reload if no callback provided
+        console.log('🎬 Film erfolgreich hinzugefügt, lade Seite neu...')
+        setTimeout(() => {
+          window.location.reload()
+        }, 500)
+      }
 
     } catch (error) {
       console.error('Error adding movie:', error)

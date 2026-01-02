@@ -1,12 +1,30 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AddMovieForm from '@/components/AddMovieForm'
 import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { UserProvider, useUser } from '@/lib/UserContext'
+import { MovieDetailModal } from '@/components/MovieDetailModal'
+import { supabase } from '@/lib/supabase'
+import type { Movie, Tag } from '@/lib/supabase'
+
+interface Rating {
+  rating: number
+  user_name: string
+  user_id: string
+}
+
+interface EnhancedMovie extends Movie {
+  tags: Tag[]
+  averageRating: number
+  ratingCount: number
+  ratings: Rating[]
+  actor?: string
+  director?: string
+}
 
 function AddContent() {
   const { user, isLoading } = useUser()
@@ -15,6 +33,56 @@ function AddContent() {
     serie: false,
     buch: false
   })
+  const [selectedMovie, setSelectedMovie] = useState<EnhancedMovie | null>(null)
+  const [isLoadingMovie, setIsLoadingMovie] = useState(false)
+
+  const handleMovieAdded = async (movieId: string) => {
+    // Load the full movie details to show in modal
+    setIsLoadingMovie(true)
+    try {
+      const { data: movieData, error: movieError } = await supabase
+        .from('movies')
+        .select('*')
+        .eq('id', movieId)
+        .single()
+
+      if (movieError) throw movieError
+
+      // Load tags
+      const { data: tagsData } = await supabase
+        .from('movie_tags')
+        .select('tag_id, tags(id, name, color)')
+        .eq('movie_id', movieId)
+
+      const tags = tagsData?.map((mt: any) => mt.tags).filter(Boolean) || []
+
+      // Load ratings
+      const { data: ratingsData } = await supabase
+        .from('ratings')
+        .select('rating, user_name, user_id')
+        .eq('movie_id', movieId)
+
+      const ratings = ratingsData || []
+      const averageRating = ratings.length > 0
+        ? ratings.reduce((sum: number, r: any) => sum + r.rating, 0) / ratings.length
+        : 0
+
+      const enhancedMovie: EnhancedMovie = {
+        ...movieData,
+        tags,
+        ratings,
+        averageRating,
+        ratingCount: ratings.length
+      }
+
+      setSelectedMovie(enhancedMovie)
+    } catch (error) {
+      console.error('Error loading movie details:', error)
+      alert('Fehler beim Laden der Film-Details')
+    } finally {
+      setIsLoadingMovie(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -38,9 +106,20 @@ function AddContent() {
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} exclusive={true} />
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <AddMovieForm selectedContentType={contentTypes} />
+          <AddMovieForm 
+            selectedContentType={contentTypes} 
+            onMovieAdded={handleMovieAdded}
+          />
         </div>
       </main>
+
+      {/* Movie Detail Modal */}
+      {selectedMovie && (
+        <MovieDetailModal
+          movie={selectedMovie}
+          onClose={() => setSelectedMovie(null)}
+        />
+      )}
     </div>
   )
 }
