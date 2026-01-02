@@ -227,7 +227,7 @@ export function AddMovieForm() {
                 <div className="font-medium text-gray-900">{suggestion.title}</div>
                 <div className="text-sm text-gray-500">
                   {suggestion.year && `${suggestion.year} • `}
-                  {suggestion.creator_name && `von ${suggestion.creator_name}`}
+                  {/* creator name intentionally hidden for cleaner UI */}
                 </div>
               </div>
             ))}

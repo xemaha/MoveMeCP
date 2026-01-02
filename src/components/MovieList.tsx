@@ -1319,9 +1319,6 @@ export function MovieList(props?: MovieListProps) {
                                  rec.movie.content_type === 'serie' ? '📺' : '📚'} 
                                 {rec.movie.content_type}
                               </span>
-                              {rec.movie.created_by && (
-                                <span className="text-xs text-gray-500">von {rec.movie.created_by}</span>
-                              )}
                             </div>
 
                             {/* Description */}
@@ -1742,9 +1739,6 @@ export function MovieList(props?: MovieListProps) {
                        movie.content_type === 'serie' ? '📺' : '📚'} 
                       {movie.content_type}
                     </span>
-                    {movie.created_by && (
-                      <span className="text-xs text-gray-500">von {movie.created_by}</span>
-                    )}
                     {/* Personal recommendation badge */}
                     {movieRecommenders.has(movie.id) && (
                       <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
