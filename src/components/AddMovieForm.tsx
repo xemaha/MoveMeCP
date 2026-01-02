@@ -563,9 +563,12 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
       
       // Call the callback with the movie ID instead of reloading
       if (onMovieAdded && movieId) {
-        console.log('🎬 Film erfolgreich hinzugefügt, öffne Detail-Modal...')
+        console.log('✅ Callback onMovieAdded exists, calling with movieId:', movieId)
         onMovieAdded(movieId)
       } else {
+        console.log('⚠️ Fallback: No callback provided or movieId missing')
+        console.log('onMovieAdded:', onMovieAdded)
+        console.log('movieId:', movieId)
         // Fallback: reload if no callback provided
         console.log('🎬 Film erfolgreich hinzugefügt, lade Seite neu...')
         setTimeout(() => {
