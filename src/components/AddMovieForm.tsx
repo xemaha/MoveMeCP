@@ -666,9 +666,10 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
           {tmdbSuggestions.map((tmdb) => (
             <div
               key={tmdb.id}
-              onClick={async () => {
-                await handleTmdbSuggestionClick(tmdb)
-                // Dropdown schließt sich automatisch durch handleTmdbSuggestionClick
+              onClick={() => {
+                setShowTmdbSuggestions(false)
+                setShowBookSuggestions(false)
+                handleTmdbSuggestionClick(tmdb)
               }}
               className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
             >
@@ -696,7 +697,11 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
           {bookSuggestions.map((book) => (
             <div
               key={book.id}
-              onClick={() => handleBookSuggestionClick(book)}
+              onClick={() => {
+                setShowTmdbSuggestions(false)
+                setShowBookSuggestions(false)
+                handleBookSuggestionClick(book)
+              }}
               className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
             >
               {book.cover && (
