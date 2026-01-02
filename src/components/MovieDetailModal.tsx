@@ -543,8 +543,14 @@ export function MovieDetailModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full sm:max-w-2xl h-full overflow-y-auto flex flex-col">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full sm:max-w-2xl h-full overflow-y-auto flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-4 sm:p-6 flex-1 flex flex-col">
           <div className="flex justify-between items-center mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900">Details &amp; Tags bearbeiten</h2>
