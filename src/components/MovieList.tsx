@@ -929,7 +929,13 @@ export function MovieList(props?: MovieListProps) {
 
   const filterOutDismissed = (items: any[]) => {
     if (!dismissedRecommendationIds.size) return items
-    return items.filter(item => !dismissedRecommendationIds.has(item.movie.id))
+    return items.filter(item => {
+      const isDismissed = dismissedRecommendationIds.has(item.movie.id)
+      if (!isDismissed) return true
+
+      // Allow personal recommendations to resurface even if the movie was dismissed before
+      return item.isPersonal === true
+    })
   }
 
   const getAvailableTagsWithCounts = () => {
@@ -1025,8 +1031,7 @@ export function MovieList(props?: MovieListProps) {
               <div>
                 <p className="text-sm text-gray-600 mb-2">Basierend auf Nutzern mit ähnlichem Geschmack</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {recommendations
-                    .filter(rec => !dismissedRecommendationIds.has(rec.movie.id))
+                  {filterOutDismissed(recommendations)
                     .filter(rec => {
                       // Filter by source
                       if (recommendationSourceFilter === 'ai' && rec.source !== 'ai') return false
