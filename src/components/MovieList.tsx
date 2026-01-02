@@ -162,6 +162,37 @@ export function MovieList(props?: MovieListProps) {
   const [personalRecommendations, setPersonalRecommendations] = useState<any[]>([])
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set())
   const [mergedRecommendations, setMergedRecommendations] = useState<any[]>([])
+  
+  // Map: movie_id -> array of recommender names
+  const [movieRecommenders, setMovieRecommenders] = useState<Map<string, string[]>>(new Map())
+
+  // Load dismissed recommendations per user from Supabase
+  const loadDismissedRecommendations = async () => {
+    if (!user) {
+      setDismissedRecommendationIds(new Set())
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('dismissed_recommendations')
+        .select('movie_id')
+        .eq('user_id', user.id)
+      
+      if (error) throw error
+      
+      if (data) {
+        const movieIds = data.map(item => item.movie_id)
+        setDismissedRecommendationIds(new Set(movieIds))
+      }
+    } catch (err) {
+      console.error('Error loading dismissed recommendations', err)
+    }
+  }
+
+  useEffect(() => {
+    loadDismissedRecommendations()
+  }, [user])
 
   // Initialize data
   useEffect(() => {
@@ -216,6 +247,7 @@ export function MovieList(props?: MovieListProps) {
 
   useEffect(() => {
     loadWatchlist()
+    loadPersonalRecommendationsForAllMovies()
   }, [user])
 
   useEffect(() => {
@@ -432,6 +464,39 @@ export function MovieList(props?: MovieListProps) {
     }
   }
 
+  const loadPersonalRecommendationsForAllMovies = async () => {
+    if (!user) {
+      setMovieRecommenders(new Map())
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('personal_recommendations')
+        .select('movie_id, from_user_id, user_profiles!personal_recommendations_from_user_id_fkey(name)')
+        .eq('to_user_id', user.id)
+
+      if (error) throw error
+
+      const recommenderMap = new Map<string, string[]>()
+      if (data) {
+        data.forEach((rec: any) => {
+          const movieId = rec.movie_id
+          const fromUserName = rec.user_profiles?.name || rec.from_user_id
+          
+          if (!recommenderMap.has(movieId)) {
+            recommenderMap.set(movieId, [])
+          }
+          recommenderMap.get(movieId)!.push(fromUserName)
+        })
+      }
+      
+      setMovieRecommenders(recommenderMap)
+    } catch (error) {
+      console.error('Error loading personal recommendations:', error)
+    }
+  }
+
   // Event handlers
   const handleRating = async (movieId: string, rating: number) => {
     if (!user || !movieId) {
@@ -608,6 +673,16 @@ export function MovieList(props?: MovieListProps) {
         setPersonalRecommendations(prev => prev.filter((item: any) => item.movie_id !== movieId))
       }
 
+      // Add to dismissed list in Supabase
+      const { error: dismissError } = await supabase
+        .from('dismissed_recommendations')
+        .insert({ user_id: user.id, movie_id: movieId })
+        .select()
+      
+      if (dismissError && !dismissError.message.includes('duplicate')) {
+        console.error('Error saving dismissed recommendation:', dismissError)
+      }
+
       setDismissedRecommendationIds(prev => {
         const next = new Set(prev)
         next.add(movieId)
@@ -621,6 +696,11 @@ export function MovieList(props?: MovieListProps) {
       alert('Konnte Empfehlung nicht löschen')
     }
   }
+
+  useEffect(() => {
+    setRecommendations(prev => filterOutDismissed(prev))
+    setMergedRecommendations(prev => filterOutDismissed(prev))
+  }, [dismissedRecommendationIds])
 
   const handleRecommendClick = (movie: EnhancedMovie) => {
     if (!user) {
@@ -824,6 +904,11 @@ export function MovieList(props?: MovieListProps) {
     setFilters(prev => ({ ...prev, ...updates }))
   }
 
+  const filterOutDismissed = (items: any[]) => {
+    if (!dismissedRecommendationIds.size) return items
+    return items.filter(item => !dismissedRecommendationIds.has(item.movie.id))
+  }
+
   const getAvailableTagsWithCounts = () => {
     return allTags.map(tag => {
       const count = filteredMovies.filter(movie => 
@@ -869,8 +954,9 @@ export function MovieList(props?: MovieListProps) {
       
       // Merge recommendations with source info
       const merged = mergeRecommendations(recs, personalRecs, movies)
-      setMergedRecommendations(merged)
-      setRecommendations(merged)
+      const filteredMerged = filterOutDismissed(merged)
+      setMergedRecommendations(filteredMerged)
+      setRecommendations(filteredMerged)
       
       // Calculate predicted ratings for all movies
       const predictions = calculatePredictedRatings(user.id, movies)
@@ -1607,7 +1693,7 @@ export function MovieList(props?: MovieListProps) {
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                       {movie.content_type === 'film' ? '🎬' : 
                        movie.content_type === 'serie' ? '📺' : '📚'} 
@@ -1615,6 +1701,12 @@ export function MovieList(props?: MovieListProps) {
                     </span>
                     {movie.created_by && (
                       <span className="text-xs text-gray-500">von {movie.created_by}</span>
+                    )}
+                    {/* Personal recommendation badge */}
+                    {movieRecommenders.has(movie.id) && (
+                      <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                        👥 {movieRecommenders.get(movie.id)!.join(', ')}
+                      </span>
                     )}
                   </div>
 
