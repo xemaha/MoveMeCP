@@ -21,7 +21,7 @@ interface MyProvidersSetupProps {
   onChange: (profile: UserProviderProfile) => void
 }
 
-const FEATURED_PROVIDER_IDS = [8, 9, 350, 192, 130, 337] // Netflix, Prime, Apple TV+, YouTube, Sky Go, Disney+
+const FEATURED_PROVIDER_IDS = [8, 9, 350, 192, 9999, 337] // Netflix, Prime, Apple TV+, YouTube, WOW, Disney+
 
 // Group providers by their main brand (e.g., all Amazon variants under one group)
 const PROVIDER_GROUPS: Record<string, { mainId: number; variants: number[]; displayName: string }> = {
@@ -35,16 +35,26 @@ const PROVIDER_GROUPS: Record<string, { mainId: number; variants: number[]; disp
     variants: [350, 2], // Apple TV+, Apple TV
     displayName: 'Apple TV'
   },
-  'sky': {
-    mainId: 130,
-    variants: [130, 207, 29], // Sky Go, Sky X, Sky Store
-    displayName: 'Sky'
+  'wow': {
+    mainId: 9999,
+    variants: [130, 207, 29, 9999], // Sky Go, Sky X, Sky Store, WOW
+    displayName: 'WOW'
   }
 }
 
 export function MyProvidersSetup({ availableProviders, isLoading, profile, onChange }: MyProvidersSetupProps) {
   const [showSetup, setShowSetup] = useState(false)
   const [showAllProviders, setShowAllProviders] = useState(false)
+
+  // Custom logos
+  const YOUTUBE_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80' viewBox='0 0 120 80'><rect width='120' height='80' rx='12' fill='%23ff0000'/><polygon points='50,25 85,40 50,55' fill='white'/></svg>"
+  const WOW_LOGO = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='80' viewBox='0 0 140 80'><rect width='140' height='80' rx='12' fill='%2300153f'/><text x='70' y='50' text-anchor='middle' font-family='Arial' font-size='36' font-weight='700' fill='white'>WOW</text></svg>"
+
+  const getCustomLogo = (providerId: number, providerName: string) => {
+    if (providerId === 9999) return WOW_LOGO
+    if (providerName.toLowerCase().includes('youtube')) return YOUTUBE_LOGO
+    return null
+  }
 
   // Deduplicate and group providers
   const processedProviders = useMemo(() => {
@@ -168,6 +178,7 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
     const categories = getProviderCategories(provider.provider_id)
     const isSelected = categories.length > 0
     const allowedCategories = CATEGORY_RESTRICTIONS[provider.provider_id] || ['flatrate', 'rent', 'buy']
+    const customLogo = getCustomLogo(provider.provider_id, provider.provider_name)
     
     return (
       <div
@@ -177,14 +188,22 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
         }`}
       >
         {/* Provider Logo */}
-        <img
-          src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
-          alt={provider.provider_name}
-          className="w-10 h-10 rounded-lg flex-shrink-0 object-cover"
-          onError={(e) => {
-            e.currentTarget.style.backgroundColor = '#f3f4f6'
-          }}
-        />
+        {customLogo ? (
+          <img
+            src={customLogo}
+            alt={provider.provider_name}
+            className="w-10 h-10 rounded-lg flex-shrink-0 object-contain bg-white"
+          />
+        ) : (
+          <img
+            src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
+            alt={provider.provider_name}
+            className="w-10 h-10 rounded-lg flex-shrink-0 object-cover"
+            onError={(e) => {
+              e.currentTarget.style.backgroundColor = '#f3f4f6'
+            }}
+          />
+        )}
         
         {/* Provider Name */}
         <div className="flex-1 min-w-0">
