@@ -496,26 +496,43 @@ export function MovieList(props?: MovieListProps) {
       
       console.log('Looking up user profiles for IDs:', userIds)
       
-      // Load user profiles for these IDs - handle single ID case
+      // Load user profiles for these IDs - try multiple approaches
       let profiles = null
       let profilesError = null
       
-      if (userIds.length === 1) {
-        // Single ID - use eq instead of in
-        const result = await supabase
+      // First try: use filter approach which is more reliable
+      try {
+        const { data: profileData, error: err } = await supabase
           .from('user_profiles')
           .select('id, name')
-          .eq('id', userIds[0])
-        profiles = result.data
-        profilesError = result.error
-      } else {
-        // Multiple IDs - use in
-        const result = await supabase
-          .from('user_profiles')
-          .select('id, name')
-          .in('id', userIds)
-        profiles = result.data
-        profilesError = result.error
+          .filter('id', 'in', `(${userIds.join(',')})`)
+        
+        if (!err) {
+          profiles = profileData
+          profilesError = err
+        }
+      } catch (e) {
+        console.log('Filter approach failed, trying individual queries')
+      }
+      
+      // Fallback: query each ID individually
+      if (!profiles || profiles.length === 0) {
+        profiles = []
+        for (const userId of userIds) {
+          try {
+            const { data: singleProfile, error: singleError } = await supabase
+              .from('user_profiles')
+              .select('id, name')
+              .eq('id', userId)
+              .maybeSingle()
+            
+            if (singleProfile && !singleError) {
+              profiles.push(singleProfile)
+            }
+          } catch (e) {
+            console.log('Individual query failed for:', userId)
+          }
+        }
       }
 
       console.log('Found profiles:', profiles)
