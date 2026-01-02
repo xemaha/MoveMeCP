@@ -16,8 +16,8 @@ export function WatchProvidersDisplay({ movie, size = 'small' }: WatchProvidersD
     const name = (provider.provider_name || '').trim()
     const lower = name.toLowerCase()
 
-    // Map any Sky/WOW variant to WOW with a custom logo
-    if (/(\bsky\b|\bwow\b)/i.test(name)) {
+    // Map any Sky/WOW variant (Sky Ticket, Sky Store, WOW, etc.) to WOW with a custom logo
+    if (lower.includes('sky') || lower.includes('wow')) {
       return {
         ...provider,
         provider_id: 'custom-wow',
