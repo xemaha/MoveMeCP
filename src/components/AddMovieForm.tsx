@@ -97,6 +97,12 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
   // Add watchlist state back
   const [addToWatchlist, setAddToWatchlist] = useState(false)
 
+  // Ref for title input to blur after submit
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  // Ref for title input to blur after submit
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
   // Autocomplete für Filme (Supabase + TMDb)
   // Click outside ref for TMDb dropdown
   const tmdbDropdownRef = useRef<HTMLDivElement>(null);
@@ -567,6 +573,13 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
       setGenre('')
       setTrailerUrl('')
       
+      // Blur the title input to close dropdown and remove focus
+      if (titleInputRef.current) {
+        titleInputRef.current.blur()
+      }
+      setShowTmdbSuggestions(false)
+      setShowBookSuggestions(false)
+      
       // Call the callback with the movie ID instead of reloading
       if (onMovieAdded && movieId) {
         console.log('✅ Callback onMovieAdded exists, calling with movieId:', movieId)
@@ -625,6 +638,7 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
           Titel *
         </label>
         <input
+          ref={titleInputRef}
           type="text"
           id="title"
           value={title}
