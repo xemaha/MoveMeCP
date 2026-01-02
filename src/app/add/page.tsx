@@ -37,9 +37,11 @@ function AddContent() {
   const [isLoadingMovie, setIsLoadingMovie] = useState(false)
 
   const handleMovieAdded = async (movieId: string) => {
+    console.log('🎬 handleMovieAdded called with movieId:', movieId)
     // Load the full movie details to show in modal
     setIsLoadingMovie(true)
     try {
+      console.log('Loading movie details from Supabase...')
       const { data: movieData, error: movieError } = await supabase
         .from('movies')
         .select('*')
@@ -47,6 +49,7 @@ function AddContent() {
         .single()
 
       if (movieError) throw movieError
+      console.log('Movie data loaded:', movieData)
 
       // Load tags
       const { data: tagsData } = await supabase
@@ -55,6 +58,7 @@ function AddContent() {
         .eq('movie_id', movieId)
 
       const tags = tagsData?.map((mt: any) => mt.tags).filter(Boolean) || []
+      console.log('Tags loaded:', tags)
 
       // Load ratings
       const { data: ratingsData } = await supabase
@@ -75,6 +79,7 @@ function AddContent() {
         ratingCount: ratings.length
       }
 
+      console.log('Opening modal with movie:', enhancedMovie)
       setSelectedMovie(enhancedMovie)
     } catch (error) {
       console.error('Error loading movie details:', error)
