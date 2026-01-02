@@ -32,6 +32,12 @@ export default function MoviePage() {
       setIsLoading(true)
       setError(null)
 
+      if (!supabase || typeof (supabase as any).from !== 'function') {
+        console.error('Supabase client not available')
+        setError('Datenbank nicht erreichbar')
+        return
+      }
+
       const rawId = params?.id
       const movieId = Array.isArray(rawId) ? rawId[0] : rawId
       if (!movieId) {
