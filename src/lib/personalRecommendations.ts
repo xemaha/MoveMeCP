@@ -17,7 +17,6 @@ export async function loadPersonalRecommendations(userId: string): Promise<Perso
       .select(`
         movie_id,
         from_user_id,
-        from_user_name,
         created_at
       `)
       .eq('to_user_id', userId)
@@ -25,10 +24,27 @@ export async function loadPersonalRecommendations(userId: string): Promise<Perso
 
     if (error) throw error
 
+    const recs = data || []
+
+    // Resolve aliases for recommenders
+    const fromUserIds = Array.from(new Set(recs.map((rec: any) => rec.from_user_id).filter(Boolean)))
+    let aliasMap = new Map<string, string>()
+
+    if (fromUserIds.length > 0) {
+      const { data: profiles, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('user_id, alias')
+        .in('user_id', fromUserIds)
+
+      if (!profileError && profiles) {
+        aliasMap = new Map(profiles.map((p: any) => [p.user_id, p.alias]))
+      }
+    }
+
     // Return data with from_user_name if available, otherwise use from_user_id as fallback
-    return (data || []).map((rec: any) => ({
+    return recs.map((rec: any) => ({
       ...rec,
-      from_user_name: rec.from_user_name || rec.from_user_id
+      from_user_name: aliasMap.get(rec.from_user_id) || rec.from_user_id
     }))
   } catch (error) {
     console.error('Error loading personal recommendations:', error)

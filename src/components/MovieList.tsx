@@ -478,7 +478,7 @@ export function MovieList(props?: MovieListProps) {
       // Load all personal recommendations for this user with from_user_name directly
       const { data, error } = await supabase
         .from('personal_recommendations')
-        .select('movie_id, from_user_id, from_user_name')
+        .select('movie_id, from_user_id')
         .eq('to_user_id', user.id)
 
       if (error) {
@@ -493,11 +493,26 @@ export function MovieList(props?: MovieListProps) {
 
       console.log('Loaded personal recommendations data:', data)
 
-      // Build recommender map using from_user_name directly from the table
+      // Resolve aliases for recommenders
+      const fromUserIds = Array.from(new Set(data.map((rec: any) => rec.from_user_id).filter(Boolean)))
+      let aliasMap = new Map<string, string>()
+
+      if (fromUserIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('user_id, alias')
+          .in('user_id', fromUserIds)
+
+        if (!profileError && profiles) {
+          aliasMap = new Map(profiles.map((p: any) => [p.user_id, p.alias]))
+        }
+      }
+
+      // Build recommender map using resolved aliases
       const recommenderMap = new Map<string, string[]>()
       data.forEach((rec: any) => {
         const movieId = rec.movie_id
-        const fromUserName = rec.from_user_name || rec.from_user_id
+        const fromUserName = aliasMap.get(rec.from_user_id) || rec.from_user_id
         
         if (!recommenderMap.has(movieId)) {
           recommenderMap.set(movieId, [])
