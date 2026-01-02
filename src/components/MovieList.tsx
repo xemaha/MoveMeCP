@@ -494,16 +494,40 @@ export function MovieList(props?: MovieListProps) {
       // Get unique user IDs
       const userIds = [...new Set(data.map((rec: any) => rec.from_user_id))]
       
-      // Load user profiles for these IDs
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select('id, name')
-        .in('id', userIds)
+      console.log('Looking up user profiles for IDs:', userIds)
+      
+      // Load user profiles for these IDs - handle single ID case
+      let profiles = null
+      let profilesError = null
+      
+      if (userIds.length === 1) {
+        // Single ID - use eq instead of in
+        const result = await supabase
+          .from('user_profiles')
+          .select('id, name')
+          .eq('id', userIds[0])
+        profiles = result.data
+        profilesError = result.error
+      } else {
+        // Multiple IDs - use in
+        const result = await supabase
+          .from('user_profiles')
+          .select('id, name')
+          .in('id', userIds)
+        profiles = result.data
+        profilesError = result.error
+      }
+
+      console.log('Found profiles:', profiles)
+      if (profilesError) {
+        console.error('Error loading profiles:', profilesError)
+      }
 
       const userIdToName = new Map<string, string>()
       if (profiles && !profilesError) {
         profiles.forEach((profile: any) => {
           userIdToName.set(profile.id, profile.name || profile.id)
+          console.log('Mapped user:', profile.id, '->', profile.name || profile.id)
         })
       }
 
@@ -520,7 +544,7 @@ export function MovieList(props?: MovieListProps) {
       })
       
       setMovieRecommenders(recommenderMap)
-      console.log('Loaded personal recommendations for', recommenderMap.size, 'movies')
+      console.log('Loaded personal recommendations for', recommenderMap.size, 'movies:', recommenderMap)
     } catch (error) {
       console.error('Error loading personal recommendations:', error)
     }
