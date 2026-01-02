@@ -37,14 +37,8 @@ interface AddMovieFormProps {
 export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddMovieFormProps) {
   // Handler für Google Books Auswahl
   const handleBookSuggestionClick = (book: any) => {
-    // Close dropdowns immediately
-    setShowTmdbSuggestions(false)
-    setShowBookSuggestions(false)
-    
-    // Blur title input to remove focus and prevent dropdown reopening
-    if (titleInputRef.current) {
-      titleInputRef.current.blur()
-    }
+    // Simuliere Klick außerhalb um Dropdown zu schließen
+    simulateClickOutside()
     
     setTitle(book.title);
     setDescription(book.description);
@@ -241,17 +235,21 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
     setTmdbSelected(false); // Reset, falls wieder Supabase gewählt wird
   }
 
+  // Simuliert einen Klick außerhalb des Dropdowns
+  const simulateClickOutside = () => {
+    const clickEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    })
+    document.body.dispatchEvent(clickEvent)
+  }
+
   // TMDb Auswahl
   const [trailerUrl, setTrailerUrl] = useState<string | undefined>(undefined);
   const handleTmdbSuggestionClick = async (tmdb: TmdbSuggestion) => {
-    // Close dropdowns immediately
-    setShowTmdbSuggestions(false)
-    setShowBookSuggestions(false)
-    
-    // Blur title input to remove focus and prevent dropdown reopening
-    if (titleInputRef.current) {
-      titleInputRef.current.blur()
-    }
+    // Simuliere Klick außerhalb um Dropdown zu schließen
+    simulateClickOutside()
     
     setTitle(tmdb.title || tmdb.name || '');
     const yearStr = tmdb.release_date || tmdb.first_air_date || '';
@@ -688,14 +686,6 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
             <div
               key={tmdb.id}
               onClick={() => {
-                // Close everything first
-                setShowTmdbSuggestions(false)
-                setShowBookSuggestions(false)
-                setTmdbSuggestions([])
-                if (titleInputRef.current) {
-                  titleInputRef.current.blur()
-                }
-                // Then handle the click
                 handleTmdbSuggestionClick(tmdb)
               }}
               className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
@@ -725,14 +715,6 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
             <div
               key={book.id}
               onClick={() => {
-                // Close everything first
-                setShowTmdbSuggestions(false)
-                setShowBookSuggestions(false)
-                setBookSuggestions([])
-                if (titleInputRef.current) {
-                  titleInputRef.current.blur()
-                }
-                // Then handle the click
                 handleBookSuggestionClick(book)
               }}
               className="px-3 py-2 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
