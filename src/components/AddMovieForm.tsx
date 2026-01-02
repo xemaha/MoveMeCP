@@ -661,11 +661,8 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
             <div
               key={tmdb.id}
               onClick={async () => {
-                await handleTmdbSuggestionClick(tmdb);
-                setTimeout(() => {
-                  const descInput = document.getElementById('description');
-                  if (descInput) (descInput as HTMLInputElement).focus();
-                }, 0);
+                await handleTmdbSuggestionClick(tmdb)
+                // Dropdown schließt sich automatisch durch handleTmdbSuggestionClick
               }}
               className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 flex items-center gap-2"
             >
