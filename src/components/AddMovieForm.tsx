@@ -690,12 +690,13 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
               onMouseDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                // Blur and close immediately - synchronous
+                // Aggressively close everything immediately
                 if (titleInputRef.current) {
                   titleInputRef.current.blur()
                 }
                 setShowTmdbSuggestions(false)
                 setShowBookSuggestions(false)
+                setTmdbSuggestions([]) // Clear suggestions to force re-render
                 // Handle data update after blur
                 setTimeout(() => handleTmdbSuggestionClick(tmdb), 0)
               }}
@@ -728,12 +729,13 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
               onMouseDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                // Blur and close immediately - synchronous
+                // Aggressively close everything immediately
                 if (titleInputRef.current) {
                   titleInputRef.current.blur()
                 }
                 setShowTmdbSuggestions(false)
                 setShowBookSuggestions(false)
+                setBookSuggestions([]) // Clear suggestions to force re-render
                 // Handle data update after blur
                 setTimeout(() => handleBookSuggestionClick(book), 0)
               }}
