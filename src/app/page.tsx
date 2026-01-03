@@ -55,12 +55,11 @@ function LandingContent() {
   ]
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen" style={{ backgroundColor: '#fcfcfd' }}>
       <UserHeader />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-10">
-          <img src="/logo-icon.png" alt="EMOVA Logo" className="h-48 w-auto mx-auto mb-6" />
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">EMOVA</h1>
+          <img src="/emova_text.png" alt="EMOVA" className="h-48 w-auto mx-auto mb-8" />
           <p className="text-gray-600">Wähle, was du als Nächstes tun möchtest.</p>
         </div>
 
