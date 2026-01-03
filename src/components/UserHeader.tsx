@@ -25,8 +25,7 @@ export function UserHeader() {
             onClick={() => router.push('/')}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
           >
-            <img src="/logo.png" alt="EMOVA Logo" className="h-8 w-auto" />
-            <span className="font-bold text-gray-900 hidden sm:inline">EMOVA</span>
+            <img src="/logo.png" alt="EMOVA Logo" className="h-12 w-auto" />
           </button>
           
           {/* Navigation Buttons - Hidden on mobile, shown on md and up */}
