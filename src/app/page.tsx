@@ -59,7 +59,10 @@ function LandingContent() {
       <UserHeader />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-10">
-          <img src="/logo.png" alt="EMOVA Logo" className="h-32 w-auto mx-auto mb-4" />
+          <div className="flex justify-center items-center gap-4 mb-8">
+            <img src="/logo-icon.png" alt="EMOVA Logo" className="h-32 w-auto" />
+            <h1 className="text-5xl font-bold text-gray-900">EMOVA</h1>
+          </div>
           <p className="text-gray-600">Wähle, was du als Nächstes tun möchtest.</p>
         </div>
 
