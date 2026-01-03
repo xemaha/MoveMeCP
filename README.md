@@ -1,6 +1,6 @@
-# 🎬 MoveMe - Film Bewertungs-App
+# 🎬 EMOVA - Film Bewertungs-App
 
-Eine moderne Web-App zum Bewerten und Taggen von Filmen, entwickelt mit Next.js und Supabase.
+Eine moderne Web-App zum Bewerten und Taggen von Filmen, Serien und Büchern, entwickelt mit Next.js und Supabase.
 
 ## ✨ Features
 

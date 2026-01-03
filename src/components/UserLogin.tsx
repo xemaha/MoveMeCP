@@ -44,8 +44,9 @@ export function UserLogin() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            🎬 MoveMe
+          <img src="/logo.png" alt="EMOVA Logo" className="h-12 w-auto mx-auto mb-4" />
+          <h2 className="text-3xl font-bold text-gray-900">
+            EMOVA
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Willkommen! Gib deinen Namen ein, um zu starten.

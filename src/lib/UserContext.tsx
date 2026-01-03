@@ -17,13 +17,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem('moveme-user')
+    const storedUser = localStorage.getItem('emova-user')
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser))
       } catch (error) {
         console.error('Error parsing stored user:', error)
-        localStorage.removeItem('moveme-user')
+        localStorage.removeItem('emova-user')
       }
     }
     setIsLoading(false)
@@ -32,9 +32,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const updateUser = (newUser: User | null) => {
     setUser(newUser)
     if (newUser) {
-      localStorage.setItem('moveme-user', JSON.stringify(newUser))
+      localStorage.setItem('emova-user', JSON.stringify(newUser))
     } else {
-      localStorage.removeItem('moveme-user')
+      localStorage.removeItem('emova-user')
     }
   }
 
