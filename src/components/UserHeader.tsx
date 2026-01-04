@@ -11,10 +11,10 @@ export function UserHeader() {
   if (!user) return null
 
   const navigationItems = [
-    { label: 'Hinzufügen', path: '/add', emoji: '➕' },
-    { label: 'Suchen', path: '/search', emoji: '🔍' },
-    { label: 'Empfehlungen', path: '/recommendations', emoji: '✨' },
-    { label: 'Watchlist', path: '/watchlist', emoji: '👁️' }
+    { label: 'Hinzufügen', path: '/add', image: '/buttons/01_add.png' },
+    { label: 'Suchen', path: '/search', image: '/buttons/01_search.png' },
+    { label: 'Empfehlungen', path: '/recommendations', image: '/buttons/01_reco.png' },
+    { label: 'Watchlist', path: '/watchlist', image: '/buttons/01_watchlist.png' }
   ]
 
   return (
@@ -29,18 +29,17 @@ export function UserHeader() {
           </button>
           
           {/* Navigation Buttons - Hidden on mobile, shown on md and up */}
-          <div className="hidden md:flex gap-2">
+          <div className="hidden md:flex gap-3">
             {navigationItems.map(item => (
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  pathname === item.path
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                className={`hover:opacity-80 transition-opacity ${
+                  pathname === item.path ? 'opacity-100' : 'opacity-70'
                 }`}
+                title={item.label}
               >
-                {item.label}
+                <img src={item.image} alt={item.label} className="h-10 w-auto" />
               </button>
             ))}
           </div>
@@ -51,17 +50,13 @@ export function UserHeader() {
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-colors ${
-                  pathname === item.path
-                    ? 'bg-blue-50 border-blue-300 shadow-sm'
-                    : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50'
+                className={`hover:opacity-80 transition-opacity ${
+                  pathname === item.path ? 'opacity-100' : 'opacity-70'
                 }`}
                 title={item.label}
                 aria-label={item.label}
               >
-                <span className="text-lg">
-                  {item.emoji}
-                </span>
+                <img src={item.image} alt={item.label} className="h-10 w-auto" />
               </button>
             ))}
           </div>

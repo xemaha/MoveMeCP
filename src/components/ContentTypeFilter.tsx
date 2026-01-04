@@ -14,9 +14,9 @@ interface ContentTypeFilterProps {
 
 export function ContentTypeFilter({ selected, onChange, exclusive = false }: ContentTypeFilterProps) {
   const types = [
-    { key: 'film', label: '🎬 Filme', color: 'blue' },
-    { key: 'serie', label: '📺 Serien', color: 'purple' },
-    { key: 'buch', label: '📚 Bücher', color: 'green' }
+    { key: 'film', label: 'Filme', image: '/buttons/02_Filme_filter.png' },
+    { key: 'serie', label: 'Serien', image: '/buttons/02_serien_filter.png' },
+    { key: 'buch', label: 'Bücher', image: '/buttons/02_books_filter.png' }
   ] as const
 
   const handleClick = (key: 'film' | 'serie' | 'buch') => {
@@ -40,31 +40,18 @@ export function ContentTypeFilter({ selected, onChange, exclusive = false }: Con
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <h3 className="text-sm font-semibold text-gray-800 mb-3">Inhaltstyp</h3>
       <div className="flex gap-3 flex-wrap">
-        {types.map(({ key, label }) => (
+        {types.map(({ key, label, image }) => (
           <button
             key={key}
             onClick={() => handleClick(key)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+            className={`transition-opacity ${
               selected[key as keyof typeof selected]
-                ? 'shadow-md hover:shadow-lg'
-                : 'opacity-60 hover:opacity-80'
+                ? 'opacity-100'
+                : 'opacity-50 hover:opacity-70'
             }`}
-            style={{
-              backgroundColor: selected[key as keyof typeof selected]
-                ? key === 'film'
-                  ? '#3b82f6'
-                  : key === 'serie'
-                    ? '#a855f7'
-                    : '#22c55e'
-                : key === 'film'
-                  ? '#e0e7ff'
-                  : key === 'serie'
-                    ? '#f3e8ff'
-                    : '#f0fdf4',
-              color: selected[key as keyof typeof selected] ? 'white' : '#6b7280'
-            }}
+            title={label}
           >
-            {label}
+            <img src={image} alt={label} className="h-10 w-auto" />
           </button>
         ))}
       </div>

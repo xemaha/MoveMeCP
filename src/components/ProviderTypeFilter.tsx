@@ -34,46 +34,42 @@ export function ProviderTypeFilter({
         
         <button
           onClick={() => toggleFilter('flatrate')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            selectedTypes.flatrate
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          className={`transition-opacity ${
+            selectedTypes.flatrate ? 'opacity-100' : 'opacity-50 hover:opacity-70'
           }`}
+          title="Im Abo"
         >
-          💳 Im Abo
+          <img src="/buttons/06_abo_filter.png" alt="Im Abo" className="h-10 w-auto" />
         </button>
         
         <button
           onClick={() => toggleFilter('rent')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            selectedTypes.rent
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          className={`transition-opacity ${
+            selectedTypes.rent ? 'opacity-100' : 'opacity-50 hover:opacity-70'
           }`}
+          title="Leihen"
         >
-          🎬 Leihen
+          <img src="/buttons/06_leihen_filter.png" alt="Leihen" className="h-10 w-auto" />
         </button>
         
         <button
           onClick={() => toggleFilter('buy')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            selectedTypes.buy
-              ? 'bg-purple-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          className={`transition-opacity ${
+            selectedTypes.buy ? 'opacity-100' : 'opacity-50 hover:opacity-70'
           }`}
+          title="Kaufen"
         >
-          🛒 Kaufen
+          <img src="/buttons/06_kaufen_filter.png" alt="Kaufen" className="h-10 w-auto" />
         </button>
         
         <button
           onClick={() => toggleFilter('unavailable')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            selectedTypes.unavailable
-              ? 'bg-gray-700 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          className={`transition-opacity ${
+            selectedTypes.unavailable ? 'opacity-100' : 'opacity-50 hover:opacity-70'
           }`}
+          title="Nicht verfügbar"
         >
-          ❌ Nicht verfügbar
+          <img src="/buttons/06_notavailable_filter.png" alt="Nicht verfügbar" className="h-10 w-auto" />
         </button>
       </div>
     </div>
