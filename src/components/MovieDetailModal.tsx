@@ -566,17 +566,6 @@ export function MovieDetailModal({
           {/* Movie details now shown as plain text below */}
 
           <div className="space-y-3 sm:space-y-4">
-            {/* Content Type Icon */}
-            {movie.content_type && (
-              <div className="flex justify-start mb-2">
-                <img 
-                  src={`/buttons/04_${movie.content_type}.png`} 
-                  alt={movie.content_type} 
-                  className="h-8 w-auto"
-                />
-              </div>
-            )}
-            
             {/* Title as heading */}
             <h3 className="text-2xl font-bold text-gray-900 mb-2">{editedMovie.title}</h3>
             {/* Poster */}
