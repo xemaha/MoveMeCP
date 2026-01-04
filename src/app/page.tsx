@@ -33,22 +33,22 @@ function LandingContent() {
     },
     {
       href: '/search',
-      title: 'Search database',
-      description: 'Filter, suchen und stöbern in deiner Sammlung',
+      title: 'Search Database',
+      description: 'Stöbere und filtere in deiner Sammlung und den Sammlungen deiner friends',
       image: '/buttons/01_search.png',
       color: 'bg-green-50 border-green-200 hover:border-green-300'
     },
     {
       href: '/recommendations',
       title: 'Get recommendations',
-      description: 'Personalisierte Vorschläge basierend auf deinem Geschmack',
+      description: 'Persönliche Empfehlungen deiner friends und AI-Vorschläge basierend auf deinem Geschmack',
       image: '/buttons/01_reco.png',
       color: 'bg-purple-50 border-purple-200 hover:border-purple-300'
     },
     {
       href: '/watchlist',
-      title: 'My Watchlist',
-      description: 'Alle deine Favoriten schnell verfügbar',
+      title: 'My Watch/Readlist',
+      description: 'Alles was du noch sehen oder lesen willst schnell verfügbar',
       image: '/buttons/01_watchlist.png',
       color: 'bg-orange-50 border-orange-200 hover:border-orange-300'
     }
@@ -60,7 +60,6 @@ function LandingContent() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="text-center mb-10">
           <img src="/emova_text.png" alt="EMOVA" className="h-48 w-auto mx-auto mb-8" />
-          <p className="text-gray-600">Wähle, was du als Nächstes tun möchtest.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -75,7 +74,6 @@ function LandingContent() {
                 <div className="text-lg font-semibold text-gray-900">{action.title}</div>
                 <p className="text-sm text-gray-600">{action.description}</p>
               </div>
-              <span className="mt-auto text-sm font-medium text-blue-600 group-hover:text-blue-700">Weiter →</span>
             </Link>
           ))}
         </div>
