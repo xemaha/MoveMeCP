@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       api_key: TMDB_API_KEY,
       sort_by: 'vote_average.desc',
       'vote_average.gte': '7',
+      'vote_count.gte': '300', // Bekanntheit: mindestens 300 Stimmen
       include_adult: 'false',
       page: '1'
     })
@@ -68,12 +69,17 @@ export async function POST(req: NextRequest) {
     const discoverUrl = `${TMDB_BASE_URL}/discover/movie?${params.toString()}`
     const res = await fetch(discoverUrl)
     if (!res.ok) {
+      const text = await res.text()
+      console.error('TMDb discover failed', res.status, text)
       return NextResponse.json({ error: 'TMDb discover failed' }, { status: 500 })
     }
     const data = await res.json()
 
-    // Kandidaten auf 20 beschränken
-    const candidates = (data.results || []).slice(0, 20).filter((c: any) => !excludeTmdbIds.includes(c.id))
+    // Kandidaten auf 20 beschränken + bekannte Titel filtern
+    const candidates = (data.results || [])
+      .filter((c: any) => (c.vote_count || 0) >= 300 && (c.vote_average || 0) >= 7)
+      .slice(0, 20)
+      .filter((c: any) => !excludeTmdbIds.includes(c.id))
 
     // Hole Details (inkl. Credits) für bessere Bewertung
     const enriched = [] as any[]
@@ -82,6 +88,7 @@ export async function POST(req: NextRequest) {
         const details = await getTMDbDetails(cand.id, 'movie')
         enriched.push({ base: cand, details })
       } catch (err) {
+        console.warn('TMDb details failed for', cand.id, err)
         // überspringe fehlgeschlagene Details
       }
     }
@@ -92,19 +99,28 @@ export async function POST(req: NextRequest) {
       const actors = (details.actors || '').split(',').map((a: string) => a.trim()).filter(Boolean)
       const genres: string[] = (details.genres || []).map((g: any) => (g.name as string).toLowerCase())
 
-      let score = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01
+      let score = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01 + Math.log1p(base.vote_count || 0) * 0.3
+
+      const matchReasons: string[] = []
 
       if (director && preferredDirectors.map((d) => d.toLowerCase()).includes(director.toLowerCase())) {
         score += 3
+        matchReasons.push(`Regie: ${director}`)
       }
 
       const prefActors = preferredActors.map((a) => a.toLowerCase())
-      const actorMatches = actors.filter((a: string) => prefActors.includes(a.toLowerCase())).length
-      score += actorMatches * 0.8
+      const matchedActors = actors.filter((a: string) => prefActors.includes(a.toLowerCase()))
+      if (matchedActors.length > 0) {
+        score += matchedActors.length * 0.8
+        matchReasons.push(`Schauspiel: ${matchedActors.slice(0, 3).join(', ')}`)
+      }
 
       const prefGenres = preferredGenres.map((g) => g.toLowerCase())
-      const genreMatches = genres.filter((g) => prefGenres.includes(g)).length
-      score += genreMatches * 0.5
+      const matchedGenres = genres.filter((g) => prefGenres.includes(g))
+      if (matchedGenres.length > 0) {
+        score += matchedGenres.length * 0.5
+        matchReasons.push(`Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
+      }
 
       return {
         tmdb_id: base.id,
@@ -113,12 +129,14 @@ export async function POST(req: NextRequest) {
         poster_path: base.poster_path,
         release_date: base.release_date,
         vote_average: base.vote_average,
+        vote_count: base.vote_count,
         popularity: base.popularity,
         director,
         actors,
         genres: details.genres || [],
         trailer_url: details.trailerUrl,
-        score
+        score,
+        matchReasons
       }
     })
 

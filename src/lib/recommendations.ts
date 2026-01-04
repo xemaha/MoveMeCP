@@ -491,6 +491,9 @@ export function calculatePredictedRatings(
   // Calculate user's director preferences
   const directorPreferences = calculateDirectorPreferences(currentUserId, allMovies)
 
+  // Calculate user's actor preferences
+  const actorPreferences = calculateActorPreferences(currentUserId, allMovies)
+
   // Calculate predicted ratings for all movies
   for (const movie of allMovies) {
     // Calculate weighted average rating from similar users (Collaborative Filtering)

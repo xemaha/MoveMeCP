@@ -288,31 +288,3 @@ export function MovieGrid() {
     </div>
   )
 }
-}
-              
-              {/* Rating */}
-              <div className="space-y-2">
-                {movie.averageRating > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">⌀ Bewertung:</span>
-                    <div className="flex">{renderStars(movie.averageRating)}</div>
-                    <span className="text-sm text-gray-500">
-                      ({movie.averageRating.toFixed(1)}, {movie.ratingCount} {movie.ratingCount === 1 ? 'Bewertung' : 'Bewertungen'})
-                    </span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Bewerten:</span>
-                  <div className="flex">
-                    {renderStars(0, true, (rating) => handleAddRating(movie.id, rating))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}

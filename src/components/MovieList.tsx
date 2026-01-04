@@ -300,13 +300,25 @@ export function MovieList(props?: MovieListProps) {
   }
 
   const loadMovies = async () => {
-    const { data: moviesData, error: moviesError } = await supabase
-      .from('movies')
-      .select('*')
-      .order('created_at', { ascending: false })
+    try {
+      if (!supabase || typeof supabase.from !== 'function') {
+        console.error('Supabase client not initialized')
+        setError('Datenbank nicht konfiguriert. Bitte Umgebungsvariablen prüfen.')
+        return
+      }
 
-    if (moviesError) throw moviesError
-    if (!moviesData) return
+      const { data: moviesData, error: moviesError } = await supabase
+        .from('movies')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (moviesError) {
+        console.error('Error loading movies:', moviesError)
+        setError('Fehler beim Laden der Filme')
+        return
+      }
+
+      if (!moviesData) return
 
     const enhancedMovies = await Promise.all(
       moviesData
@@ -355,7 +367,11 @@ export function MovieList(props?: MovieListProps) {
         })
     )
 
-    setMovies(enhancedMovies)
+      setMovies(enhancedMovies)
+    } catch (err) {
+      console.error('Exception in loadMovies:', err)
+      setError('Fehler beim Laden der Filme')
+    }
   }
 
   const loadTags = async () => {
@@ -461,19 +477,29 @@ export function MovieList(props?: MovieListProps) {
   }
 
   const loadTagUsageStats = async () => {
-    const { data } = await supabase
-      .from('movie_tags')
-      .select('tag_id, tags(name)')
+    try {
+      if (!supabase || typeof supabase.from !== 'function') return
+      const { data, error } = await supabase
+        .from('movie_tags')
+        .select('tag_id, tags(name)')
       
-    if (data) {
-      const countMap: Record<string, number> = {}
-      data.forEach((row: any) => {
-        const tagName = row.tags?.name
-        if (tagName) {
-          countMap[tagName] = (countMap[tagName] || 0) + 1
-        }
-      })
-      setTagUsageCount(countMap)
+      if (error) {
+        console.error('Error loading tag usage stats:', error)
+        return
+      }
+
+      if (data) {
+        const countMap: Record<string, number> = {}
+        data.forEach((row: any) => {
+          const tagName = row.tags?.name
+          if (tagName) {
+            countMap[tagName] = (countMap[tagName] || 0) + 1
+          }
+        })
+        setTagUsageCount(countMap)
+      }
+    } catch (err) {
+      console.error('Exception in loadTagUsageStats:', err)
     }
   }
 
@@ -647,9 +673,66 @@ export function MovieList(props?: MovieListProps) {
     }
   }
 
-  const handleWatchlistToggle = async (movieId: string) => {
-    if (!user || !movieId) {
+  const ensureMovieExists = async (movie: any): Promise<string | null> => {
+    if (!movie) return null
+
+    // Already a persisted movie (not a tmdb placeholder)
+    if (movie.id && typeof movie.id === 'string' && !movie.id.startsWith('tmdb-')) {
+      return movie.id
+    }
+
+    const tmdbId = (movie as any).tmdb_id
+    if (!tmdbId) return movie.id || null
+
+    // Try to find existing by tmdb_id
+    try {
+      const { data: existing } = await supabase
+        .from('movies')
+        .select('id')
+        .eq('tmdb_id', tmdbId)
+        .maybeSingle()
+
+      if (existing?.id) return existing.id as string
+
+      // Insert minimal record for discover result
+      const insertPayload: any = {
+        title: movie.title,
+        description: movie.description || null,
+        poster_url: movie.poster_url || null,
+        tmdb_id: tmdbId,
+        media_type: movie.media_type || 'movie',
+        content_type: movie.content_type || 'film',
+        created_by: user?.id || null,
+        creator_name: user?.name || null
+      }
+
+      const { data: inserted, error: insertError } = await supabase
+        .from('movies')
+        .insert(insertPayload)
+        .select('id')
+        .single()
+
+      if (insertError) {
+        console.error('Error inserting discover movie', insertError)
+        return null
+      }
+
+      return inserted?.id as string
+    } catch (err) {
+      console.error('ensureMovieExists error', err)
+      return null
+    }
+  }
+
+  const handleWatchlistToggle = async (movie: EnhancedMovie | any) => {
+    if (!user || !movie) {
       alert('Du musst eingeloggt sein!')
+      return
+    }
+
+    const movieId = await ensureMovieExists(movie)
+    if (!movieId) {
+      alert('Konnte Film nicht speichern.')
       return
     }
 
@@ -1062,7 +1145,8 @@ export function MovieList(props?: MovieListProps) {
       source: 'discover',
       isPersonal: false,
       predictedRating: item.score ? Math.min(5, item.score / 2) : 0,
-      score: item.score
+      score: item.score,
+      matchReasons: item.matchReasons || []
     }
   }
 
@@ -1114,17 +1198,25 @@ export function MovieList(props?: MovieListProps) {
         body: JSON.stringify(payload)
       })
 
-      if (!response.ok) {
-        throw new Error('Discover request failed')
+      const raw = await response.text()
+      let data: any = {}
+      try {
+        data = raw ? JSON.parse(raw) : {}
+      } catch (parseErr) {
+        console.error('Discover parse error', parseErr, raw)
+        throw new Error('Discover-Antwort ungültig')
       }
 
-      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Discover request failed')
+      }
+
       const mapped = (data.results || []).map(mapDiscoverResult)
       setDiscoverResults(mapped)
       setShowRecommendations(true)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Discover error', err)
-      setDiscoverError('Konnte Discover-Ergebnisse nicht laden')
+      setDiscoverError(err?.message || 'Konnte Discover-Ergebnisse nicht laden')
     } finally {
       setIsDiscoverLoading(false)
     }
@@ -1277,11 +1369,20 @@ export function MovieList(props?: MovieListProps) {
                             </div>
                             
                             {/* Predicted Match - only show for AI recommendations */}
-                            {rec.source === 'ai' && rec.predictedRating > 0 && (
+                            {rec.predictedRating > 0 && (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
                                 <span className="text-xs text-green-700 font-medium">
                                   Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
                                 </span>
+                              </div>
+                            )}
+
+                            {/* Match reasons */}
+                            {rec.matchReasons?.length > 0 && (
+                              <div className="text-xs text-gray-600 mb-2 space-y-1">
+                                {rec.matchReasons.slice(0, 3).map((reason: string, idx: number) => (
+                                  <div key={idx}>• {reason}</div>
+                                ))}
                               </div>
                             )}
                             
@@ -1360,7 +1461,7 @@ export function MovieList(props?: MovieListProps) {
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
-                              onClick={() => handleWatchlistToggle(rec.movie.id)}
+                              onClick={() => handleWatchlistToggle(rec.movie)}
                               className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                                 watchlistMovies.has(rec.movie.id)
                                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -1460,7 +1561,7 @@ export function MovieList(props?: MovieListProps) {
                             </div>
                             
                             {/* Predicted Match */}
-                            {rec.source === 'ai' && rec.predictedRating > 0 && (
+                            {rec.predictedRating > 0 && (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
                                 <span className="text-xs text-green-700 font-medium">
                                   Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
@@ -1549,7 +1650,7 @@ export function MovieList(props?: MovieListProps) {
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
-                              onClick={() => handleWatchlistToggle(rec.movie.id)}
+                              onClick={() => handleWatchlistToggle(rec.movie)}
                               className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                                 watchlistMovies.has(rec.movie.id)
                                   ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -2035,7 +2136,7 @@ export function MovieList(props?: MovieListProps) {
 
                   {/* Watchlist button */}
                   <button
-                    onClick={() => handleWatchlistToggle(movie.id)}
+                    onClick={() => handleWatchlistToggle(movie)}
                     className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       watchlistMovies.has(movie.id)
                         ? 'bg-green-100 text-green-700 hover:bg-green-200'
