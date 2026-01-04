@@ -35,7 +35,9 @@ interface DiscoverPayload {
   preferredGenres?: string[]
   preferredDirectors?: string[]
   preferredActors?: string[]
+  preferredKeywords?: string[]
   excludeTmdbIds?: number[]
+  mediaTypes?: string[]
 }
 
 export async function POST(req: NextRequest) {
@@ -44,7 +46,9 @@ export async function POST(req: NextRequest) {
     preferredGenres = [],
     preferredDirectors = [],
     preferredActors = [],
-    excludeTmdbIds = []
+    preferredKeywords = [],
+    excludeTmdbIds = [],
+    mediaTypes = ['movie']
   } = body || {}
 
   try {
@@ -57,8 +61,8 @@ export async function POST(req: NextRequest) {
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       sort_by: 'popularity.desc',
-      'vote_average.gte': '7',
-      'vote_count.gte': '500', // etwas lockern, um mehr Treffer zu liefern
+      'vote_average.gte': '6.5',
+      'vote_count.gte': '300',
       include_adult: 'false',
       page: '1'
     })
@@ -66,30 +70,47 @@ export async function POST(req: NextRequest) {
       params.set('with_genres', genreIds.join(','))
     }
 
-    const discoverUrl = `${TMDB_BASE_URL}/discover/movie?${params.toString()}`
-    const res = await fetch(discoverUrl)
-    if (!res.ok) {
-      const text = await res.text()
-      console.error('TMDb discover failed', res.status, text)
-      return NextResponse.json({ error: 'TMDb discover failed' }, { status: 500 })
+    // Make separate discover calls for each media type
+    const allCandidates: any[] = []
+    
+    for (const mediaType of mediaTypes) {
+      const discoverUrl = `${TMDB_BASE_URL}/discover/${mediaType}?${params.toString()}`
+      const res = await fetch(discoverUrl)
+      if (!res.ok) {
+        const text = await res.text()
+        console.warn(`TMDb discover failed for ${mediaType}`, res.status, text)
+        continue // try next media type
+      }
+      const data = await res.json()
+      
+      const candidates = (data.results || [])
+        .filter((c: any) => (c.vote_count || 0) >= 300 && (c.vote_average || 0) >= 6.5 && (c.popularity || 0) >= 20)
+        .map((c: any) => ({ ...c, media_type: mediaType }))
+        .filter((c: any) => !excludeTmdbIds.includes(c.id))
+      
+      allCandidates.push(...candidates)
     }
-    const data = await res.json()
-
-    // Kandidaten hart filtern: hohe Vote-Count + Mindest-Popularität
-    const candidates = (data.results || [])
-      .filter((c: any) => (c.vote_count || 0) >= 500 && (c.vote_average || 0) >= 7 && (c.popularity || 0) >= 30)
-      .slice(0, 40)
-      .filter((c: any) => !excludeTmdbIds.includes(c.id))
+    
+    if (allCandidates.length === 0) {
+      return NextResponse.json({ error: 'No candidates found' }, { status: 404 })
+    }
+    
+    // Take top candidates across all media types
+    const candidates = allCandidates
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+      .slice(0, 60)
 
     // Hole Details (inkl. Credits) für bessere Bewertung
     const enriched = [] as any[]
     for (const cand of candidates) {
       try {
-        const details = await getTMDbDetails(cand.id, 'movie')
+        const mediaType = cand.media_type || 'movie'
+        const details = await getTMDbDetails(cand.id, mediaType)
         enriched.push({ base: cand, details })
       } catch (err) {
         console.warn('TMDb details failed for', cand.id, err)
-        // überspringe fehlgeschlagene Details
+        // Bei Fehler trotzdem aufnehmen, aber ohne Details
+        enriched.push({ base: cand, details: { director: '', actors: '', genres: [], keywords: [], trailerUrl: '' } })
       }
     }
 
@@ -98,6 +119,7 @@ export async function POST(req: NextRequest) {
       const director = details.director || ''
       const actors = (details.actors || '').split(',').map((a: string) => a.trim()).filter(Boolean)
       const genres: string[] = (details.genres || []).map((g: any) => (g.name as string).toLowerCase())
+      const keywords: string[] = details.keywords || []
 
       const baseScore = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01 + Math.log1p(base.vote_count || 0) * 0.3
       let score = baseScore
@@ -108,8 +130,13 @@ export async function POST(req: NextRequest) {
       // TMDb baseline
       scoreBreakdown.push(`Basis: ${baseScore.toFixed(2)} (TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'}, ${base.vote_count} Stimmen)`)
 
-      if (director && preferredDirectors.map((d) => d.toLowerCase()).includes(director.toLowerCase())) {
-        const boost = 3
+      // Director matching with name extraction from payload
+      const preferredDirectorNames = preferredDirectors.map((d: any) => 
+        typeof d === 'string' ? d.toLowerCase() : d.name?.toLowerCase?.()
+      ).filter(Boolean)
+      
+      if (director && preferredDirectorNames.includes(director.toLowerCase())) {
+        const boost = 5
         score += boost
         matchReasons.push(`🎬 Regie: ${director}`)
         scoreBreakdown.push(`+ ${boost} (Regie-Match)`)
@@ -127,10 +154,36 @@ export async function POST(req: NextRequest) {
       const prefGenres = preferredGenres.map((g) => g.toLowerCase())
       const matchedGenres = genres.filter((g) => prefGenres.includes(g))
       if (matchedGenres.length > 0) {
-        const boost = matchedGenres.length * 0.5
+        const boost = matchedGenres.length * 2.0
         score += boost
         matchReasons.push(`🎞️ Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
         scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedGenres.length} Genre-Match)`)
+      }
+
+      // Match keywords with user's preferred keywords from highly-rated movies
+      // Build frequency map for color coding
+      const keywordFrequencyMap: Record<string, number> = {}
+      preferredKeywords.forEach((k: any) => {
+        const name = typeof k === 'string' ? k : k.name
+        const count = typeof k === 'string' ? 1 : (k.count || 1)
+        keywordFrequencyMap[name.toLowerCase()] = count
+      })
+      
+      const prefKeywords = preferredKeywords.map((k: any) => 
+        typeof k === 'string' ? k.toLowerCase() : k.name?.toLowerCase?.()
+      ).filter(Boolean)
+      
+      const matchedKeywords = keywords.filter((k) => prefKeywords.includes(k))
+      const keywordFrequencies: Record<string, number> = {}
+      matchedKeywords.forEach(k => {
+        keywordFrequencies[k] = keywordFrequencyMap[k] || 1
+      })
+      
+      if (matchedKeywords.length > 0) {
+        const boost = matchedKeywords.length * 3.0
+        score += boost
+        matchReasons.push(`🔑 Keywords: ${matchedKeywords.slice(0, 3).join(', ')}`)
+        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedKeywords.length} Keyword-Match aus deinen Top-Filmen)`)
       }
 
       if (matchReasons.length === 0) {
@@ -141,7 +194,8 @@ export async function POST(req: NextRequest) {
 
       return {
         tmdb_id: base.id,
-        title: base.title,
+        title: base.title || base.name,
+        media_type: base.media_type || 'movie',
         overview: base.overview,
         poster_path: base.poster_path,
         release_date: base.release_date,
@@ -151,6 +205,9 @@ export async function POST(req: NextRequest) {
         director,
         actors,
         genres: details.genres || [],
+        keywords,
+        matchedKeywords,
+        keywordFrequencies,
         trailer_url: details.trailerUrl,
         score,
         matchReasons,
@@ -160,7 +217,7 @@ export async function POST(req: NextRequest) {
 
     scored.sort((a, b) => b.score - a.score)
 
-    return NextResponse.json({ results: scored.slice(0, 12) })
+    return NextResponse.json({ results: scored.slice(0, 20) })
   } catch (err) {
     console.error('Discover error', err)
     return NextResponse.json({ error: 'Discover failed' }, { status: 500 })

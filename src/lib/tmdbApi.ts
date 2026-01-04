@@ -18,9 +18,9 @@ export async function searchTMDb(title: string) {
   return data.results.filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv');
 }
 
-export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<MovieDetails & { trailerUrl?: string, director?: string, actors?: string }> {
-  // Hole Movie- oder Serien-Details inkl. Videos und Credits (Cast & Crew)
-  const url = `${TMDB_BASE_URL}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=videos,credits`;
+export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie'): Promise<MovieDetails & { trailerUrl?: string, director?: string, actors?: string, keywords?: string[] }> {
+  // Hole Movie- oder Serien-Details inkl. Videos, Credits und Keywords
+  const url = `${TMDB_BASE_URL}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=videos,credits,keywords`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('TMDb details failed');
   const data = await res.json();
@@ -40,7 +40,15 @@ export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' =
   if (data.credits && data.credits.cast) {
     actors = data.credits.cast.slice(0, 3).map((a: any) => a.name).join(', ');
   }
-  return { ...data, trailerUrl, director, actors };
+  // Keywords extrahieren
+  let keywords: string[] = [];
+  if (data.keywords) {
+    const keywordList = mediaType === 'movie' ? data.keywords.keywords : data.keywords.results;
+    if (keywordList) {
+      keywords = keywordList.map((k: any) => k.name.toLowerCase());
+    }
+  }
+  return { ...data, trailerUrl, director, actors, keywords };
 }
 
 export async function getWatchProviders(tmdbId: number, mediaType: 'movie' | 'tv' = 'movie') {

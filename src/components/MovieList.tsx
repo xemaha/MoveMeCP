@@ -1069,6 +1069,7 @@ export function MovieList(props?: MovieListProps) {
     const directorStats = new Map<string, { sum: number; count: number }>()
     const actorStats = new Map<string, { sum: number; count: number }>()
     const tagCounts = new Map<string, number>()
+    const keywordCounts = new Map<string, number>()
 
     // Use movies the user rated highly as preference signals
     const strongRatings = movies.filter((m) => {
@@ -1106,12 +1107,23 @@ export function MovieList(props?: MovieListProps) {
           tagCounts.set(name, (tagCounts.get(name) || 0) + 1)
         })
       }
+
+      // Collect keywords from TMDb metadata if available
+      if ((movie as any).keywords) {
+        const keywords = (movie as any).keywords
+        if (Array.isArray(keywords)) {
+          keywords.forEach(kw => {
+            const name = (typeof kw === 'string' ? kw : kw.name || '').toLowerCase()
+            if (name) keywordCounts.set(name, (keywordCounts.get(name) || 0) + 1)
+          })
+        }
+      }
     })
 
     const preferredDirectors = Array.from(directorStats.entries())
       .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))
       .slice(0, 5)
-      .map(([name]) => name)
+      .map(([name, stats]) => ({ name, count: stats.count }))
 
     const preferredActors = Array.from(actorStats.entries())
       .sort((a, b) => b[1].count - a[1].count)
@@ -1123,20 +1135,39 @@ export function MovieList(props?: MovieListProps) {
       .slice(0, 6)
       .map(([name]) => name)
 
+    const preferredKeywords = Array.from(keywordCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }))
+
     const excludeTmdbIds = movies
       .map(m => (m as any).tmdb_id)
       .filter((id): id is number => typeof id === 'number')
+
+    // Detect which media types user has rated
+    const hasMovies = movies.some(m => m.content_type === 'film' || m.content_type === 'movie')
+    const hasSeries = movies.some(m => m.content_type === 'serie' || m.content_type === 'tv')
+    const mediaTypes: string[] = []
+    if (hasMovies) mediaTypes.push('movie')
+    if (hasSeries) mediaTypes.push('tv')
+    if (mediaTypes.length === 0) mediaTypes.push('movie') // default
 
     return {
       preferredDirectors,
       preferredActors,
       preferredGenres,
-      excludeTmdbIds
+      preferredKeywords,
+      excludeTmdbIds,
+      mediaTypes
     }
   }
 
   const mapDiscoverResult = (item: any) => {
     const averageRating = item.vote_average ? Math.round((item.vote_average / 2) * 10) / 10 : 0
+    const mediaType = item.media_type || 'movie'
+    const title = item.title || item.name || 'Unknown'
+    const contentType = mediaType === 'tv' ? 'serie' : 'film'
+    
     const tags = (item.genres || []).map((g: any, idx: number) => ({
       id: String(g.id ?? idx),
       name: g.name,
@@ -1144,21 +1175,42 @@ export function MovieList(props?: MovieListProps) {
       created_at: ''
     }))
 
+    // Color keywords based on match frequency: green (>=4 matches), yellow (2-3), gray (1 or none)
+    const matchedMap = new Map<string, number>()
+    if (item.keywordFrequencies) {
+      Object.entries(item.keywordFrequencies).forEach(([kw, count]) => {
+        matchedMap.set(kw.toLowerCase(), count as number)
+      })
+    }
+    const keywordTags = (item.keywords || []).map((k: string, idx: number) => {
+      const freq = matchedMap.get(k.toLowerCase()) || 0
+      let color = '#9ca3af' // gray for rare/no matches
+      if (freq >= 4) color = '#10b981' // green for frequent
+      else if (freq >= 2) color = '#fbbf24' // yellow for some matches
+      
+      return {
+        id: `kw-${idx}`,
+        name: k,
+        color,
+        created_at: ''
+      }
+    })
+
     return {
       movie: {
         id: `tmdb-${item.tmdb_id}`,
-        title: item.title,
+        title,
         description: item.overview,
         poster_url: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
-        content_type: 'film',
+        content_type: contentType,
         averageRating,
         ratingCount: 0,
-        tags,
+        tags: [...tags, ...keywordTags],
         director: item.director,
         actor: Array.isArray(item.actors) ? item.actors.join(', ') : item.actors,
         trailer_url: item.trailer_url,
         tmdb_id: item.tmdb_id,
-        media_type: 'movie'
+        media_type: mediaType
       },
       source: 'discover',
       isPersonal: false,
@@ -1390,26 +1442,24 @@ export function MovieList(props?: MovieListProps) {
                             {/* Predicted Match - only show for AI recommendations */}
                             {rec.predictedRating > 0 && (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
-                                <span className="text-xs text-green-700 font-medium">
-                                  Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
-                                </span>
+                                <div className="text-xs text-green-700 font-medium mb-1">
+                                  💚 {Math.round((rec.predictedRating / 5) * 100)}% Match
+                                </div>
+                                {rec.matchReasons?.length > 0 && (
+                                  <div className="text-xs text-green-800 space-y-0.5">
+                                    {rec.matchReasons.map((reason: string, idx: number) => (
+                                      <div key={idx}>{reason}</div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
 
-                            {/* Match reasons */}
-                            {rec.matchReasons?.length > 0 && (
-                              <div className="text-xs text-gray-600 mb-2 space-y-1">
-                                {rec.matchReasons.map((reason: string, idx: number) => (
-                                  <div key={idx}>• {reason}</div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Score breakdown for discover */}
+                            {/* Score breakdown for discover - optional details */}
                             {rec.scoreBreakdown?.length > 0 && (
                               <details className="text-xs text-gray-500 mb-2">
                                 <summary className="cursor-pointer hover:text-gray-700 font-medium">
-                                  📊 Wie wurde der Score berechnet?
+                                  📊 Score-Details
                                 </summary>
                                 <div className="mt-1 ml-3 space-y-0.5 font-mono">
                                   {rec.scoreBreakdown.map((line: string, idx: number) => (
