@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       api_key: TMDB_API_KEY,
       sort_by: 'popularity.desc',
       'vote_average.gte': '7',
-      'vote_count.gte': '1000', // Bekanntheit: mindestens 1000 Stimmen
+      'vote_count.gte': '500', // etwas lockern, um mehr Treffer zu liefern
       include_adult: 'false',
       page: '1'
     })
@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
 
     // Kandidaten hart filtern: hohe Vote-Count + Mindest-Popularität
     const candidates = (data.results || [])
-      .filter((c: any) => (c.vote_count || 0) >= 1000 && (c.vote_average || 0) >= 7 && (c.popularity || 0) >= 50)
-      .slice(0, 20)
+      .filter((c: any) => (c.vote_count || 0) >= 500 && (c.vote_average || 0) >= 7 && (c.popularity || 0) >= 30)
+      .slice(0, 40)
       .filter((c: any) => !excludeTmdbIds.includes(c.id))
 
     // Hole Details (inkl. Credits) für bessere Bewertung
@@ -99,35 +99,45 @@ export async function POST(req: NextRequest) {
       const actors = (details.actors || '').split(',').map((a: string) => a.trim()).filter(Boolean)
       const genres: string[] = (details.genres || []).map((g: any) => (g.name as string).toLowerCase())
 
-      let score = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01 + Math.log1p(base.vote_count || 0) * 0.3
+      const baseScore = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01 + Math.log1p(base.vote_count || 0) * 0.3
+      let score = baseScore
 
       const matchReasons: string[] = []
+      const scoreBreakdown: string[] = []
+
+      // TMDb baseline
+      scoreBreakdown.push(`Basis: ${baseScore.toFixed(2)} (TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'}, ${base.vote_count} Stimmen)`)
 
       if (director && preferredDirectors.map((d) => d.toLowerCase()).includes(director.toLowerCase())) {
-        score += 3
-        matchReasons.push(`Regie: ${director}`)
+        const boost = 3
+        score += boost
+        matchReasons.push(`🎬 Regie: ${director}`)
+        scoreBreakdown.push(`+ ${boost} (Regie-Match)`)
       }
 
       const prefActors = preferredActors.map((a) => a.toLowerCase())
       const matchedActors = actors.filter((a: string) => prefActors.includes(a.toLowerCase()))
       if (matchedActors.length > 0) {
-        score += matchedActors.length * 0.8
-        matchReasons.push(`Schauspiel: ${matchedActors.slice(0, 3).join(', ')}`)
+        const boost = matchedActors.length * 0.8
+        score += boost
+        matchReasons.push(`🎭 Stars: ${matchedActors.slice(0, 3).join(', ')}`)
+        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedActors.length} bekannte*r Schauspieler*in)`)
       }
 
       const prefGenres = preferredGenres.map((g) => g.toLowerCase())
       const matchedGenres = genres.filter((g) => prefGenres.includes(g))
       if (matchedGenres.length > 0) {
-        score += matchedGenres.length * 0.5
-        matchReasons.push(`Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
+        const boost = matchedGenres.length * 0.5
+        score += boost
+        matchReasons.push(`🎞️ Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
+        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedGenres.length} Genre-Match)`)
       }
 
-      // Generic popularity signal as fallback reason
       if (matchReasons.length === 0) {
-        matchReasons.push(`Beliebt: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} bei ${base.vote_count} Stimmen`)
-      } else {
-        matchReasons.push(`Beliebt: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} bei ${base.vote_count} Stimmen`)
+        matchReasons.push(`⭐ Hochbewertet: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} (${base.vote_count} Stimmen)`)
       }
+
+      scoreBreakdown.push(`= Gesamt: ${score.toFixed(2)}`)
 
       return {
         tmdb_id: base.id,
@@ -143,7 +153,8 @@ export async function POST(req: NextRequest) {
         genres: details.genres || [],
         trailer_url: details.trailerUrl,
         score,
-        matchReasons
+        matchReasons,
+        scoreBreakdown
       }
     })
 

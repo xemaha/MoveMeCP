@@ -151,6 +151,7 @@ export function MovieList(props?: MovieListProps) {
   const [predictedRatings, setPredictedRatings] = useState<Map<string, number>>(new Map())
   const hasAutoCalcRecs = useRef(false)
   const [movieProviders, setMovieProviders] = useState<Map<string, any>>(new Map()) // movieId -> provider data
+  const hasAutoDiscover = useRef(false)
   
   // Recommend modal state
   const [recommendModalMovie, setRecommendModalMovie] = useState<EnhancedMovie | null>(null)
@@ -274,6 +275,23 @@ export function MovieList(props?: MovieListProps) {
       hasAutoCalcRecs.current = true
     }
   }, [defaultShowRecommendations, user, movies.length, recommendationSourceFilter])
+
+  // Auto-load discover when tab is selected
+  useEffect(() => {
+    if (
+      recommendationSourceFilter === 'discover' &&
+      user &&
+      !isDiscoverLoading &&
+      discoverResults.length === 0 &&
+      !hasAutoDiscover.current
+    ) {
+      hasAutoDiscover.current = true
+      handleDiscoverRecommendations()
+    }
+    if (recommendationSourceFilter !== 'discover') {
+      hasAutoDiscover.current = false
+    }
+  }, [recommendationSourceFilter, user, isDiscoverLoading, discoverResults.length])
 
   // Auto-calculate predictions for watchlist
   useEffect(() => {
@@ -1146,7 +1164,8 @@ export function MovieList(props?: MovieListProps) {
       isPersonal: false,
       predictedRating: item.score ? Math.min(5, item.score / 2) : 0,
       score: item.score,
-      matchReasons: item.matchReasons || []
+      matchReasons: item.matchReasons || [],
+      scoreBreakdown: item.scoreBreakdown || []
     }
   }
 
@@ -1380,10 +1399,24 @@ export function MovieList(props?: MovieListProps) {
                             {/* Match reasons */}
                             {rec.matchReasons?.length > 0 && (
                               <div className="text-xs text-gray-600 mb-2 space-y-1">
-                                {rec.matchReasons.slice(0, 3).map((reason: string, idx: number) => (
+                                {rec.matchReasons.map((reason: string, idx: number) => (
                                   <div key={idx}>• {reason}</div>
                                 ))}
                               </div>
+                            )}
+
+                            {/* Score breakdown for discover */}
+                            {rec.scoreBreakdown?.length > 0 && (
+                              <details className="text-xs text-gray-500 mb-2">
+                                <summary className="cursor-pointer hover:text-gray-700 font-medium">
+                                  📊 Wie wurde der Score berechnet?
+                                </summary>
+                                <div className="mt-1 ml-3 space-y-0.5 font-mono">
+                                  {rec.scoreBreakdown.map((line: string, idx: number) => (
+                                    <div key={idx}>{line}</div>
+                                  ))}
+                                </div>
+                              </details>
                             )}
                             
                             {/* Most similar user info */}
