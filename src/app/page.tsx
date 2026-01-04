@@ -28,28 +28,28 @@ function LandingContent() {
       href: '/add',
       title: 'Add new',
       description: 'Neuen Film, Serie oder Buch hinzufügen',
-      icon: '➕',
+      image: '/buttons/01_add.png',
       color: 'bg-blue-50 border-blue-200 hover:border-blue-300'
     },
     {
       href: '/search',
       title: 'Search database',
       description: 'Filter, suchen und stöbern in deiner Sammlung',
-      icon: '🔎',
+      image: '/buttons/01_search.png',
       color: 'bg-green-50 border-green-200 hover:border-green-300'
     },
     {
       href: '/recommendations',
       title: 'Get recommendations',
       description: 'Personalisierte Vorschläge basierend auf deinem Geschmack',
-      icon: '✨',
+      image: '/buttons/01_reco.png',
       color: 'bg-purple-50 border-purple-200 hover:border-purple-300'
     },
     {
       href: '/watchlist',
       title: 'My Watchlist',
       description: 'Alle deine Favoriten schnell verfügbar',
-      icon: '👁️',
+      image: '/buttons/01_watchlist.png',
       color: 'bg-orange-50 border-orange-200 hover:border-orange-300'
     }
   ]
@@ -70,9 +70,7 @@ function LandingContent() {
               href={action.href}
               className={`group rounded-xl border transition-all shadow-sm ${action.color} p-6 flex flex-col items-start gap-3 hover:shadow-md`}
             >
-              <span className="text-4xl" aria-hidden>
-                {action.icon}
-              </span>
+              <img src={action.image} alt={action.title} className="h-16 w-auto" />
               <div>
                 <div className="text-lg font-semibold text-gray-900">{action.title}</div>
                 <p className="text-sm text-gray-600">{action.description}</p>
