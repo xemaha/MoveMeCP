@@ -53,12 +53,12 @@ export async function POST(req: NextRequest) {
       .map((g) => GENRE_MAP[g.trim().toLowerCase()])
       .filter(Boolean) as number[]
 
-    // Basis-Discovery-Call (vote_average >= 7, sort by rating)
+    // Basis-Discovery-Call (vote_average >= 7, genug Votes/Popularität)
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
-      sort_by: 'vote_average.desc',
+      sort_by: 'popularity.desc',
       'vote_average.gte': '7',
-      'vote_count.gte': '300', // Bekanntheit: mindestens 300 Stimmen
+      'vote_count.gte': '1000', // Bekanntheit: mindestens 1000 Stimmen
       include_adult: 'false',
       page: '1'
     })
@@ -75,9 +75,9 @@ export async function POST(req: NextRequest) {
     }
     const data = await res.json()
 
-    // Kandidaten auf 20 beschränken + bekannte Titel filtern
+    // Kandidaten hart filtern: hohe Vote-Count + Mindest-Popularität
     const candidates = (data.results || [])
-      .filter((c: any) => (c.vote_count || 0) >= 300 && (c.vote_average || 0) >= 7)
+      .filter((c: any) => (c.vote_count || 0) >= 1000 && (c.vote_average || 0) >= 7 && (c.popularity || 0) >= 50)
       .slice(0, 20)
       .filter((c: any) => !excludeTmdbIds.includes(c.id))
 
@@ -120,6 +120,13 @@ export async function POST(req: NextRequest) {
       if (matchedGenres.length > 0) {
         score += matchedGenres.length * 0.5
         matchReasons.push(`Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
+      }
+
+      // Generic popularity signal as fallback reason
+      if (matchReasons.length === 0) {
+        matchReasons.push(`Beliebt: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} bei ${base.vote_count} Stimmen`)
+      } else {
+        matchReasons.push(`Beliebt: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} bei ${base.vote_count} Stimmen`)
       }
 
       return {
