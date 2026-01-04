@@ -61,10 +61,9 @@ export async function POST(req: NextRequest) {
     const params = new URLSearchParams({
       api_key: TMDB_API_KEY,
       sort_by: 'popularity.desc',
-      'vote_average.gte': '6.5',
-      'vote_count.gte': '300',
-      include_adult: 'false',
-      page: '1'
+      'vote_average.gte': '6.0',
+      'vote_count.gte': '100',
+      include_adult: 'false'
     })
     if (genreIds.length > 0) {
       params.set('with_genres', genreIds.join(','))
@@ -74,31 +73,35 @@ export async function POST(req: NextRequest) {
     const allCandidates: any[] = []
     
     for (const mediaType of mediaTypes) {
-      const discoverUrl = `${TMDB_BASE_URL}/discover/${mediaType}?${params.toString()}`
-      const res = await fetch(discoverUrl)
-      if (!res.ok) {
-        const text = await res.text()
-        console.warn(`TMDb discover failed for ${mediaType}`, res.status, text)
-        continue // try next media type
+      // fetch multiple pages until we have enough candidates
+      for (let page = 1; page <= 5; page++) {
+        params.set('page', String(page))
+        const discoverUrl = `${TMDB_BASE_URL}/discover/${mediaType}?${params.toString()}`
+        const res = await fetch(discoverUrl)
+        if (!res.ok) {
+          const text = await res.text()
+          console.warn(`TMDb discover failed for ${mediaType} page ${page}`, res.status, text)
+          break
+        }
+        const data = await res.json()
+        const candidates = (data.results || [])
+          .filter((c: any) => (c.vote_count || 0) >= 100 && (c.vote_average || 0) >= 6.0)
+          .map((c: any) => ({ ...c, media_type: mediaType }))
+          .filter((c: any) => !excludeTmdbIds.includes(c.id))
+
+        allCandidates.push(...candidates)
+        if (allCandidates.length >= 250) break
       }
-      const data = await res.json()
-      
-      const candidates = (data.results || [])
-        .filter((c: any) => (c.vote_count || 0) >= 300 && (c.vote_average || 0) >= 6.5 && (c.popularity || 0) >= 20)
-        .map((c: any) => ({ ...c, media_type: mediaType }))
-        .filter((c: any) => !excludeTmdbIds.includes(c.id))
-      
-      allCandidates.push(...candidates)
     }
     
     if (allCandidates.length === 0) {
       return NextResponse.json({ error: 'No candidates found' }, { status: 404 })
     }
     
-    // Take top candidates across all media types
+    // Take top candidates across all media types (large pool)
     const candidates = allCandidates
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-      .slice(0, 60)
+      .slice(0, 400)
 
     // Hole Details (inkl. Credits) für bessere Bewertung
     const enriched = [] as any[]
@@ -138,7 +141,7 @@ export async function POST(req: NextRequest) {
       if (director && preferredDirectorNames.includes(director.toLowerCase())) {
         const boost = 5
         score += boost
-        matchReasons.push(`🎬 Regie: ${director}`)
+        matchReasons.push(`🎬 Regie (du magst): ${director}`)
         scoreBreakdown.push(`+ ${boost} (Regie-Match)`)
       }
 
@@ -217,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     scored.sort((a, b) => b.score - a.score)
 
-    return NextResponse.json({ results: scored.slice(0, 20) })
+    return NextResponse.json({ results: scored.slice(0, 400) })
   } catch (err) {
     console.error('Discover error', err)
     return NextResponse.json({ error: 'Discover failed' }, { status: 500 })

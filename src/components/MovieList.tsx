@@ -581,9 +581,16 @@ export function MovieList(props?: MovieListProps) {
   }
 
   // Event handlers
-  const handleRating = async (movieId: string, rating: number) => {
-    if (!user || !movieId) {
+  const handleRating = async (movie: EnhancedMovie | any, rating: number) => {
+    if (!user || !movie) {
       alert('Du musst eingeloggt sein, um zu bewerten!')
+      return
+    }
+
+    // Ensure movie exists in Supabase (discover items may be tmdb-*)
+    const persistedId = await ensureMovieExists(movie)
+    if (!persistedId) {
+      alert('Konnte Film nicht speichern.')
       return
     }
 
@@ -591,7 +598,7 @@ export function MovieList(props?: MovieListProps) {
       const existingRating = await supabase
         .from('ratings')
         .select('*')
-        .eq('movie_id', movieId)
+        .eq('movie_id', persistedId)
         .eq('user_id', user.id)
         .single()
 
@@ -606,7 +613,7 @@ export function MovieList(props?: MovieListProps) {
         const { error } = await supabase
           .from('ratings')
           .insert([{
-            movie_id: movieId,
+            movie_id: persistedId,
             rating: rating,
             user_id: user.id,
             user_name: user.name,
@@ -616,10 +623,10 @@ export function MovieList(props?: MovieListProps) {
       }
 
       // Update local state
-      setMovies(prevMovies => prevMovies.map(movie => {
-        if (movie.id === movieId) {
-          const existingIndex = movie.ratings.findIndex(r => r.user_id === user.id)
-          let updatedRatings = [...movie.ratings]
+      setMovies(prevMovies => prevMovies.map(m => {
+        if (m.id === persistedId) {
+          const existingIndex = m.ratings.findIndex(r => r.user_id === user.id)
+          let updatedRatings = [...m.ratings]
           
           if (existingIndex >= 0) {
             updatedRatings[existingIndex] = { ...updatedRatings[existingIndex], rating }
@@ -632,14 +639,17 @@ export function MovieList(props?: MovieListProps) {
             : 0
 
           return {
-            ...movie,
+            ...m,
             ratings: updatedRatings,
             averageRating,
             ratingCount: updatedRatings.length
           }
         }
-        return movie
+        return m
       }))
+      
+      // Remove from discover results if rated
+      setDiscoverResults(prev => prev.filter(rec => rec.movie.id !== persistedId && rec.movie.tmdb_id !== (movie as any).tmdb_id))
     } catch (error) {
       console.error('Error handling rating:', error)
       alert('Fehler beim Verarbeiten der Bewertung')
@@ -702,40 +712,41 @@ export function MovieList(props?: MovieListProps) {
     const tmdbId = (movie as any).tmdb_id
     if (!tmdbId) return movie.id || null
 
-    // Try to find existing by tmdb_id
+    // Try to find existing by tmdb_id, then upsert if missing
     try {
-      const { data: existing } = await supabase
+      const { data: existing, error: selectError } = await supabase
         .from('movies')
         .select('id')
         .eq('tmdb_id', tmdbId)
         .maybeSingle()
 
-      if (existing?.id) return existing.id as string
+      if (!selectError && existing?.id) return existing.id as string
 
-      // Insert minimal record for discover result
       const insertPayload: any = {
         title: movie.title,
         description: movie.description || null,
+        content_type: movie.content_type || 'film',
+        created_by: user?.id || null,
+        trailer_url: movie.trailer_url || null,
         poster_url: movie.poster_url || null,
         tmdb_id: tmdbId,
         media_type: movie.media_type || 'movie',
-        content_type: movie.content_type || 'film',
-        created_by: user?.id || null,
-        creator_name: user?.name || null
+        director: movie.director || null,
+        actor: movie.actor || null
       }
 
-      const { data: inserted, error: insertError } = await supabase
+      const { data: upserted, error: upsertError } = await supabase
         .from('movies')
-        .insert(insertPayload)
+        .upsert(insertPayload, { onConflict: 'tmdb_id' })
         .select('id')
         .single()
 
-      if (insertError) {
-        console.error('Error inserting discover movie', insertError)
+      if (upsertError) {
+        console.error('Error upserting discover movie', upsertError)
         return null
       }
 
-      return inserted?.id as string
+      return upserted?.id as string
     } catch (err) {
       console.error('ensureMovieExists error', err)
       return null
@@ -747,6 +758,8 @@ export function MovieList(props?: MovieListProps) {
       alert('Du musst eingeloggt sein!')
       return
     }
+
+    const tmdbId = (movie as any).tmdb_id
 
     const movieId = await ensureMovieExists(movie)
     if (!movieId) {
@@ -772,16 +785,31 @@ export function MovieList(props?: MovieListProps) {
           return newSet
         })
       } else {
-        const { error } = await supabase
+        // Prevent duplicates: check existing watchlist entry
+        const { data: existing, error: checkError } = await supabase
           .from('watchlist')
-          .insert([{
-            movie_id: movieId,
-            user_id: user.id,
-          }])
+          .select('id')
+          .eq('movie_id', movieId)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (checkError) throw checkError
+
+        if (!existing) {
+          const { error } = await supabase
+            .from('watchlist')
+            .insert([{
+              movie_id: movieId,
+              user_id: user.id,
+            }])
           
-        if (error) throw error
+          if (error) throw error
+        }
 
         setWatchlistMovies(prev => new Set(prev).add(movieId))
+        
+        // Remove from discover results when added to watchlist
+        setDiscoverResults(prev => prev.filter(rec => rec.movie.id !== movieId && rec.movie.tmdb_id !== tmdbId))
       }
 
     } catch (error: any) {
@@ -836,6 +864,7 @@ export function MovieList(props?: MovieListProps) {
       newDismissedIds.add(movieId)
       setDismissedRecommendationIds(newDismissedIds)
       console.log('Dismissed recommendation saved to Supabase')
+      setDiscoverResults(prev => prev.filter(item => item.movie.id !== movieId))
 
       setMergedRecommendations(prev => prev.filter(item => item.movie.id !== movieId))
       setRecommendations(prev => prev.filter(item => item.movie.id !== movieId))
@@ -1144,6 +1173,16 @@ export function MovieList(props?: MovieListProps) {
       .map(m => (m as any).tmdb_id)
       .filter((id): id is number => typeof id === 'number')
 
+    // Also exclude dismissed recommendations that have tmdb_id
+    const dismissedTmdbIds = Array.from(dismissedRecommendationIds)
+      .map(movieId => {
+        const movie = movies.find(m => m.id === movieId)
+        return movie ? (movie as any).tmdb_id : null
+      })
+      .filter((id): id is number => typeof id === 'number')
+    
+    const allExcludedIds = [...new Set([...excludeTmdbIds, ...dismissedTmdbIds])]
+
     // Detect which media types user has rated
     const hasMovies = movies.some(m => m.content_type === 'film' || m.content_type === 'movie')
     const hasSeries = movies.some(m => m.content_type === 'serie' || m.content_type === 'tv')
@@ -1157,7 +1196,7 @@ export function MovieList(props?: MovieListProps) {
       preferredActors,
       preferredGenres,
       preferredKeywords,
-      excludeTmdbIds,
+      excludeTmdbIds: allExcludedIds,
       mediaTypes
     }
   }
@@ -1219,6 +1258,16 @@ export function MovieList(props?: MovieListProps) {
       matchReasons: item.matchReasons || [],
       scoreBreakdown: item.scoreBreakdown || []
     }
+  }
+
+  // Normalize titles for approximate matching (case/spacing/punctuation insensitive)
+  const normalizeTitle = (title: string) => title.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  // Only treat exact normalized match as duplicate (avoid over-filtering)
+  const isApproxSameTitle = (title: string, normalizedSet: Set<string>) => {
+    if (!title) return false
+    const norm = normalizeTitle(title)
+    return normalizedSet.has(norm)
   }
 
   const getAvailableTagsWithCounts = () => {
@@ -1283,7 +1332,50 @@ export function MovieList(props?: MovieListProps) {
       }
 
       const mapped = (data.results || []).map(mapDiscoverResult)
-      setDiscoverResults(mapped)
+      
+      // Primary filter: exclude rated, watchlist, dismissed, and approx title duplicates
+      const ratedMovies = movies.filter(m => m.ratings.some(r => r.user_id === user.id))
+      const allTmdbIds = new Set(
+        movies
+          .map(m => (m as any).tmdb_id)
+          .filter((id): id is number => typeof id === 'number')
+      )
+      const ratedMovieIds = new Set(
+        ratedMovies
+          .map(m => (m as any).tmdb_id)
+          .filter((id): id is number => typeof id === 'number')
+      )
+
+      const ratedTitlesNormalized = new Set(
+        ratedMovies
+          .map(m => m.title)
+          .filter(Boolean)
+          .map(normalizeTitle)
+      )
+      
+      const primary = mapped.filter(rec => {
+        const tmdbId = rec.movie.tmdb_id
+        const movieId = rec.movie.id
+        const titleConflict = isApproxSameTitle(rec.movie.title, ratedTitlesNormalized)
+         return !ratedMovieIds.has(tmdbId) &&
+           !allTmdbIds.has(tmdbId) &&
+           !titleConflict &&
+           !watchlistMovies.has(movieId) && 
+           !dismissedRecommendationIds.has(movieId)
+      })
+
+      // Fallback: allow rated/watchlist duplicates only if we have fewer than 20
+      const secondary = mapped.filter(rec => {
+        // keep order but skip anything already in primary
+        const alreadyInPrimary = primary.some(p => p.movie.id === rec.movie.id)
+        if (alreadyInPrimary) return false
+        // still respect dismissed to avoid resurfacing hidden items
+        const movieId = rec.movie.id
+        return !dismissedRecommendationIds.has(movieId)
+      })
+
+      const combined = [...primary, ...secondary].slice(0, 20)
+      setDiscoverResults(combined)
       setShowRecommendations(true)
     } catch (err: any) {
       console.error('Discover error', err)
@@ -1424,7 +1516,7 @@ export function MovieList(props?: MovieListProps) {
                                   </span>
                                 )}
 
-                                {user && rec.source !== 'discover' && (
+                                {user && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
@@ -1540,7 +1632,7 @@ export function MovieList(props?: MovieListProps) {
                         </div>
 
                         {/* User actions */}
-                        {user && rec.source !== 'discover' && (
+                        {user && (
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
@@ -1729,7 +1821,7 @@ export function MovieList(props?: MovieListProps) {
                         </div>
 
                         {/* User actions */}
-                        {user && rec.source !== 'discover' && (
+                        {user && (
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
@@ -2196,7 +2288,7 @@ export function MovieList(props?: MovieListProps) {
                       return (
                         <button
                           key={star}
-                          onClick={() => handleRating(movie.id, star)}
+                          onClick={() => handleRating(movie, star)}
                           className={`text-xl transition-colors hover:scale-110 ${
                             star <= userRating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
                           }`}

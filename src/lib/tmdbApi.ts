@@ -35,6 +35,10 @@ export async function getTMDbDetails(tmdbId: number, mediaType: 'movie' | 'tv' =
     const dir = data.credits.crew.find((c: any) => c.job === 'Director' || c.job === 'Regisseur');
     if (dir) director = dir.name;
   }
+  // Fallback for TV: use first created_by as showrunner if no director found
+  if (!director && mediaType === 'tv' && Array.isArray((data as any).created_by) && (data as any).created_by.length > 0) {
+    director = (data as any).created_by[0].name || '';
+  }
   // Hauptdarsteller extrahieren (max. 3)
   let actors = '';
   if (data.credits && data.credits.cast) {
