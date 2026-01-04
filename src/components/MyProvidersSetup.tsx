@@ -263,12 +263,7 @@ export function MyProvidersSetup({ availableProviders, isLoading, profile, onCha
         className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
       >
         <div>
-          <span className="font-semibold text-gray-900">⚙️ Meine Streaming-Dienste</span>
-          {totalSelected > 0 && (
-            <span className="ml-2 text-sm text-gray-500">
-              ({totalSelected} {totalSelected === 1 ? 'Dienst' : 'Dienste'} konfiguriert)
-            </span>
-          )}
+          <span className="font-semibold text-gray-900">⚙️ Meine Streaming-Dienste konfigurieren</span>
         </div>
         <span className="text-gray-500">{showSetup ? '▼' : '▶'}</span>
       </button>

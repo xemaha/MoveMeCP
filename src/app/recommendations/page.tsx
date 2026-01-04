@@ -16,7 +16,7 @@ function RecommendationsContent() {
     serie: true,
     buch: false
   })
-  const [recommendationSource, setRecommendationSource] = useState<'all' | 'ai' | 'personal'>('all')
+  const [recommendationSource, setRecommendationSource] = useState<'all' | 'ai' | 'personal' | 'discover'>('all')
 
   if (isLoading) {
     return (

@@ -68,7 +68,7 @@ interface MovieListProps {
     buy: boolean
     unavailable: boolean
   }
-  recommendationSourceFilter?: 'all' | 'ai' | 'personal'
+  recommendationSourceFilter?: 'all' | 'ai' | 'personal' | 'discover'
 }
 
 // Tag display component
@@ -162,6 +162,9 @@ export function MovieList(props?: MovieListProps) {
   const [personalRecommendations, setPersonalRecommendations] = useState<any[]>([])
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set())
   const [mergedRecommendations, setMergedRecommendations] = useState<any[]>([])
+  const [discoverResults, setDiscoverResults] = useState<any[]>([])
+  const [isDiscoverLoading, setIsDiscoverLoading] = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
   
   // Map: movie_id -> array of recommender names
   const [movieRecommenders, setMovieRecommenders] = useState<Map<string, string[]>>(new Map())
@@ -260,11 +263,17 @@ export function MovieList(props?: MovieListProps) {
 
   // Auto-calculate recommendations when on recommendations page
   useEffect(() => {
-    if (defaultShowRecommendations && !hasAutoCalcRecs.current && user && movies.length > 0) {
+    if (
+      defaultShowRecommendations &&
+      !hasAutoCalcRecs.current &&
+      user &&
+      movies.length > 0 &&
+      recommendationSourceFilter !== 'discover'
+    ) {
       handleCalculateRecommendations()
       hasAutoCalcRecs.current = true
     }
-  }, [defaultShowRecommendations, user, movies.length])
+  }, [defaultShowRecommendations, user, movies.length, recommendationSourceFilter])
 
   // Auto-calculate predictions for watchlist
   useEffect(() => {
@@ -953,6 +962,110 @@ export function MovieList(props?: MovieListProps) {
     })
   }
 
+  const buildDiscoverPayload = () => {
+    if (!user) return null
+
+    const directorStats = new Map<string, { sum: number; count: number }>()
+    const actorStats = new Map<string, { sum: number; count: number }>()
+    const tagCounts = new Map<string, number>()
+
+    // Use movies the user rated highly as preference signals
+    const strongRatings = movies.filter((m) => {
+      const rating = m.ratings.find(r => r.user_id === user.id)
+      return rating && rating.rating >= 4
+    })
+
+    strongRatings.forEach((movie) => {
+      const rating = movie.ratings.find(r => r.user_id === user.id)?.rating || 0
+
+      if (movie.director) {
+        const key = movie.director.trim()
+        if (!directorStats.has(key)) directorStats.set(key, { sum: 0, count: 0 })
+        const entry = directorStats.get(key)!
+        entry.sum += rating
+        entry.count += 1
+      }
+
+      if (movie.actor) {
+        movie.actor
+          .split(',')
+          .map(a => a.trim())
+          .filter(Boolean)
+          .forEach(actor => {
+            if (!actorStats.has(actor)) actorStats.set(actor, { sum: 0, count: 0 })
+            const entry = actorStats.get(actor)!
+            entry.sum += rating
+            entry.count += 1
+          })
+      }
+
+      if (movie.tags?.length) {
+        movie.tags.forEach(tag => {
+          const name = tag.name.toLowerCase()
+          tagCounts.set(name, (tagCounts.get(name) || 0) + 1)
+        })
+      }
+    })
+
+    const preferredDirectors = Array.from(directorStats.entries())
+      .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))
+      .slice(0, 5)
+      .map(([name]) => name)
+
+    const preferredActors = Array.from(actorStats.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 7)
+      .map(([name]) => name)
+
+    const preferredGenres = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name]) => name)
+
+    const excludeTmdbIds = movies
+      .map(m => (m as any).tmdb_id)
+      .filter((id): id is number => typeof id === 'number')
+
+    return {
+      preferredDirectors,
+      preferredActors,
+      preferredGenres,
+      excludeTmdbIds
+    }
+  }
+
+  const mapDiscoverResult = (item: any) => {
+    const averageRating = item.vote_average ? Math.round((item.vote_average / 2) * 10) / 10 : 0
+    const tags = (item.genres || []).map((g: any, idx: number) => ({
+      id: String(g.id ?? idx),
+      name: g.name,
+      color: '#e5e7eb',
+      created_at: ''
+    }))
+
+    return {
+      movie: {
+        id: `tmdb-${item.tmdb_id}`,
+        title: item.title,
+        description: item.overview,
+        poster_url: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined,
+        content_type: 'film',
+        averageRating,
+        ratingCount: 0,
+        tags,
+        director: item.director,
+        actor: Array.isArray(item.actors) ? item.actors.join(', ') : item.actors,
+        trailer_url: item.trailer_url,
+        tmdb_id: item.tmdb_id,
+        media_type: 'movie'
+      },
+      source: 'discover',
+      isPersonal: false,
+      predictedRating: item.score ? Math.min(5, item.score / 2) : 0,
+      score: item.score
+    }
+  }
+
   const getAvailableTagsWithCounts = () => {
     return allTags.map(tag => {
       const count = filteredMovies.filter(movie => 
@@ -981,6 +1094,40 @@ export function MovieList(props?: MovieListProps) {
         tag: data.tag,
         movies: data.movies.sort((a, b) => a.title.localeCompare(b.title))
       }))
+  }
+
+  const handleDiscoverRecommendations = async () => {
+    if (!user) return
+
+    const payload = buildDiscoverPayload()
+    if (!payload) return
+
+    setIsDiscoverLoading(true)
+    setDiscoverError(null)
+
+    try {
+      const response = await fetch('/api/discover', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        throw new Error('Discover request failed')
+      }
+
+      const data = await response.json()
+      const mapped = (data.results || []).map(mapDiscoverResult)
+      setDiscoverResults(mapped)
+      setShowRecommendations(true)
+    } catch (err) {
+      console.error('Discover error', err)
+      setDiscoverError('Konnte Discover-Ergebnisse nicht laden')
+    } finally {
+      setIsDiscoverLoading(false)
+    }
   }
 
   const handleCalculateRecommendations = async () => {
@@ -1031,6 +1178,9 @@ export function MovieList(props?: MovieListProps) {
   }
 
   const availableTagsWithCounts = getAvailableTagsWithCounts()
+  const isDiscoverMode = recommendationSourceFilter === 'discover'
+  const baseRecommendations = isDiscoverMode ? discoverResults : filterOutDismissed(recommendations)
+  const recommendationsLoading = isDiscoverMode ? isDiscoverLoading : isCalculatingRecommendations
 
   return (
     <div className="space-y-6">
@@ -1038,20 +1188,30 @@ export function MovieList(props?: MovieListProps) {
       {user && !hideRecommendations && (
         showOnlyRecommendations ? (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen</h3>
-            {isCalculatingRecommendations && (
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-gray-800">Empfehlungen</h3>
+              {isDiscoverMode && (
+                <button
+                  onClick={handleDiscoverRecommendations}
+                  disabled={isDiscoverLoading}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isDiscoverLoading ? 'Lädt Discover…' : 'Discover laden'}
+                </button>
+              )}
+            </div>
+            {recommendationsLoading && (
               <div className="text-sm text-gray-600">Berechne Empfehlungen...</div>
             )}
-            {recommendations.length > 0 ? (
+            {isDiscoverMode && discoverError && (
+              <div className="text-sm text-red-600">{discoverError}</div>
+            )}
+            {baseRecommendations.length > 0 ? (
               <div>
-                <p className="text-sm text-gray-600 mb-2">Basierend auf Nutzern mit ähnlichem Geschmack</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filterOutDismissed(recommendations)
+                  {baseRecommendations
                     .filter(rec => {
-                      // Filter by source
-                      if (recommendationSourceFilter === 'ai' && rec.source !== 'ai') return false
-                      if (recommendationSourceFilter === 'personal' && rec.source !== 'personal') return false
-                      
+                      if (recommendationSourceFilter !== 'all' && rec.source !== recommendationSourceFilter) return false
                       const typeFilter = contentTypeFilter || filters.contentTypes
                       const contentType = rec.movie.content_type?.toLowerCase()
                       if (contentType === 'film') return typeFilter.film
@@ -1091,13 +1251,17 @@ export function MovieList(props?: MovieListProps) {
                                   <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
                                     👥 {rec.recommenders?.join(', ')}
                                   </span>
+                                ) : rec.source === 'discover' ? (
+                                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                    🔎 Discover
+                                  </span>
                                 ) : (
                                   <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
                                     🤖 KI
                                   </span>
                                 )}
 
-                                {user && (
+                                {user && rec.source !== 'discover' && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
@@ -1192,7 +1356,7 @@ export function MovieList(props?: MovieListProps) {
                         </div>
 
                         {/* User actions */}
-                        {user && (
+                        {user && rec.source !== 'discover' && (
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
@@ -1215,20 +1379,28 @@ export function MovieList(props?: MovieListProps) {
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-gray-600">Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!</div>
+              <div className="text-sm text-gray-600">
+                {isDiscoverMode
+                  ? 'Noch keine Discover-Ergebnisse. Klicke auf „Discover laden“.'
+                  : 'Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!'}
+              </div>
             )}
           </div>
         ) : (
           <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-gray-800">🎯 Empfehlungen für dich</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Empfehlungen für dich</h3>
               <div className="flex gap-2">
                 <button
-                  onClick={handleCalculateRecommendations}
-                  disabled={isCalculatingRecommendations}
+                  onClick={isDiscoverMode ? handleDiscoverRecommendations : handleCalculateRecommendations}
+                  disabled={recommendationsLoading}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                 >
-                  {isCalculatingRecommendations ? 'Berechne...' : showRecommendations ? '🔄 Neu berechnen' : '✨ Empfehlungen anzeigen'}
+                  {recommendationsLoading
+                    ? 'Berechne...'
+                    : showRecommendations
+                      ? (isDiscoverMode ? '🔄 Discover neu laden' : '🔄 Neu berechnen')
+                      : (isDiscoverMode ? '✨ Discover anzeigen' : '✨ Empfehlungen anzeigen')}
                 </button>
                 {showRecommendations && (
                   <button
@@ -1241,15 +1413,16 @@ export function MovieList(props?: MovieListProps) {
                 )}
               </div>
             </div>
+            {isDiscoverMode && discoverError && (
+              <div className="text-sm text-red-600 mb-2">{discoverError}</div>
+            )}
             
-            {showRecommendations && recommendations.length > 0 && (
+            {showRecommendations && baseRecommendations.length > 0 && (
               <div>
-                <p className="text-sm text-gray-600 mb-4">
-                  Basierend auf Nutzern mit ähnlichem Geschmack wie du
-                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                  {recommendations
+                  {baseRecommendations
                     .filter(rec => {
+                      if (recommendationSourceFilter !== 'all' && rec.source !== recommendationSourceFilter) return false
                       const typeFilter = contentTypeFilter || filters.contentTypes
                       const contentType = rec.movie.content_type?.toLowerCase()
                       if (contentType === 'film') return typeFilter.film
@@ -1287,11 +1460,13 @@ export function MovieList(props?: MovieListProps) {
                             </div>
                             
                             {/* Predicted Match */}
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
-                              <span className="text-xs text-green-700 font-medium">
-                                Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
-                              </span>
-                            </div>
+                            {rec.source === 'ai' && rec.predictedRating > 0 && (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
+                                <span className="text-xs text-green-700 font-medium">
+                                  Wird dir mit {Math.round((rec.predictedRating / 5) * 100)}% Wahrscheinlichkeit gefallen
+                                </span>
+                              </div>
+                            )}
                             
                             {/* Most similar user info */}
                             {rec.mostSimilarUserName && rec.mostSimilarUserRating && (
@@ -1313,12 +1488,25 @@ export function MovieList(props?: MovieListProps) {
                               </div>
                             )}
                             
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                                 {rec.movie.content_type === 'film' ? '🎬' : 
                                  rec.movie.content_type === 'serie' ? '📺' : '📚'} 
                                 {rec.movie.content_type}
                               </span>
+                              {rec.source === 'personal' ? (
+                                <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                  👥 {rec.recommenders?.join(', ')}
+                                </span>
+                              ) : rec.source === 'discover' ? (
+                                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                  🔎 Discover
+                                </span>
+                              ) : (
+                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                  🤖 KI
+                                </span>
+                              )}
                             </div>
 
                             {/* Description */}
@@ -1357,7 +1545,7 @@ export function MovieList(props?: MovieListProps) {
                         </div>
 
                         {/* User actions */}
-                        {user && (
+                        {user && rec.source !== 'discover' && (
                           <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
                             {/* Watchlist button */}
                             <button
@@ -1381,9 +1569,11 @@ export function MovieList(props?: MovieListProps) {
               </div>
             )}
 
-            {showRecommendations && recommendations.length === 0 && (
+            {showRecommendations && baseRecommendations.length === 0 && (
               <p className="text-sm text-gray-600 italic">
-                Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!
+                {isDiscoverMode
+                  ? 'Noch keine Discover-Ergebnisse. Klicke auf „Discover laden“.'
+                  : 'Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!'}
               </p>
             )}
           </div>

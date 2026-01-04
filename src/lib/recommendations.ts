@@ -130,6 +130,85 @@ function calculateDirectorBoost(
 }
 
 /**
+ * Calculate actor preferences based on user's ratings
+ */
+function calculateActorPreferences(
+  currentUserId: string,
+  allMovies: Movie[]
+): Map<string, { avgRating: number; count: number }> {
+  const actorStats = new Map<string, { sum: number; count: number }>()
+
+  for (const movie of allMovies) {
+    const userRating = movie.ratings.find(r => r.user_id === currentUserId)
+    if (userRating && movie.actor && typeof movie.actor === 'string') {
+      movie.actor
+        .split(',')
+        .map(a => a.trim())
+        .filter(Boolean)
+        .forEach(actor => {
+          if (!actorStats.has(actor)) {
+            actorStats.set(actor, { sum: 0, count: 0 })
+          }
+          const stats = actorStats.get(actor)!
+          stats.sum += userRating.rating
+          stats.count += 1
+        })
+    }
+  }
+
+  const preferences = new Map<string, { avgRating: number; count: number }>()
+  for (const [actor, stats] of actorStats.entries()) {
+    if (stats.count >= 1) {
+      preferences.set(actor, {
+        avgRating: stats.sum / stats.count,
+        count: stats.count
+      })
+    }
+  }
+
+  return preferences
+}
+
+/**
+ * Calculate actor boost for a movie based on user's preferred actors
+ */
+function calculateActorBoost(
+  movie: Movie,
+  actorPreferences: Map<string, { avgRating: number; count: number }>
+): number {
+  if (!movie.actor || typeof movie.actor !== 'string') {
+    return 0
+  }
+
+  const actors = movie.actor
+    .split(',')
+    .map(a => a.trim())
+    .filter(Boolean)
+
+  if (actors.length === 0) {
+    return 0
+  }
+
+  let totalBoost = 0
+  let matches = 0
+
+  for (const actor of actors) {
+    const pref = actorPreferences.get(actor)
+    if (pref) {
+      const normalizedRating = Math.max(0, (pref.avgRating - 3) / 2)
+      totalBoost += normalizedRating
+      matches++
+    }
+  }
+
+  if (matches === 0) {
+    return 0
+  }
+
+  return totalBoost / matches
+}
+
+/**
  * Calculate tag boost for a movie based on user's tag preferences
  * Returns a value between 0 and 1
  */
@@ -297,6 +376,9 @@ export function generateRecommendations(
   // Calculate user's director preferences
   const directorPreferences = calculateDirectorPreferences(currentUserId, allMovies)
 
+  // Calculate user's actor preferences
+  const actorPreferences = calculateActorPreferences(currentUserId, allMovies)
+
   // Get movies current user has already rated
   const ratedMovieIds = new Set<string>()
   for (const movie of allMovies) {
@@ -344,21 +426,27 @@ export function generateRecommendations(
       // Calculate director boost (Content-based Filtering)
       const directorBoost = calculateDirectorBoost(movie, directorPreferences)
 
+      // Calculate actor boost (Content-based Filtering)
+      const actorBoost = calculateActorBoost(movie, actorPreferences)
+
       // Combine collaborative and content-based scores
-      // Base weights: 60% collaborative, 20% tags, 20% director.
+      // Base weights favor collaborative + strong keyword/director signal, actors slightly lower.
       // If a boost is unavailable (0), its weight shifts to collaborative so we never block recommendations.
-      const baseCollabWeight = 0.6
+      const baseCollabWeight = 0.55
       const tagWeight = 0.2
-      const directorWeight = 0.2
+      const directorWeight = 0.15
+      const actorWeight = 0.1
       let collabWeight = baseCollabWeight
 
       if (tagBoost === 0) collabWeight += tagWeight
       if (directorBoost === 0) collabWeight += directorWeight
+      if (actorBoost === 0) collabWeight += actorWeight
 
       const finalRating =
         collaborativeRating * collabWeight +
         collaborativeRating * tagBoost * tagWeight +
-        collaborativeRating * directorBoost * directorWeight
+        collaborativeRating * directorBoost * directorWeight +
+        collaborativeRating * actorBoost * actorWeight
 
       // Only recommend movies with final rating >= 3.5
       if (finalRating >= 3.5) {
@@ -427,19 +515,25 @@ export function calculatePredictedRatings(
       // Calculate director boost (Content-based Filtering)
       const directorBoost = calculateDirectorBoost(movie, directorPreferences)
 
+      // Calculate actor boost (Content-based Filtering)
+      const actorBoost = calculateActorBoost(movie, actorPreferences)
+
       // Combine collaborative and content-based scores (same dynamic weighting as generateRecommendations)
-      const baseCollabWeight = 0.6
+      const baseCollabWeight = 0.55
       const tagWeight = 0.2
-      const directorWeight = 0.2
+      const directorWeight = 0.15
+      const actorWeight = 0.1
       let collabWeight = baseCollabWeight
 
       if (tagBoost === 0) collabWeight += tagWeight
       if (directorBoost === 0) collabWeight += directorWeight
+      if (actorBoost === 0) collabWeight += actorWeight
 
       const finalRating =
         collaborativeRating * collabWeight +
         collaborativeRating * tagBoost * tagWeight +
-        collaborativeRating * directorBoost * directorWeight
+        collaborativeRating * directorBoost * directorWeight +
+        collaborativeRating * actorBoost * actorWeight
 
       predictedRatings.set(movie.id, finalRating)
     }
