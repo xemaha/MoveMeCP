@@ -566,6 +566,17 @@ export function MovieDetailModal({
           {/* Movie details now shown as plain text below */}
 
           <div className="space-y-3 sm:space-y-4">
+            {/* Content Type Icon */}
+            {movie.content_type && (
+              <div className="flex justify-start mb-2">
+                <img 
+                  src={`/buttons/04_${movie.content_type}.png`} 
+                  alt={movie.content_type} 
+                  className="h-8 w-auto"
+                />
+              </div>
+            )}
+            
             {/* Title as heading */}
             <h3 className="text-2xl font-bold text-gray-900 mb-2">{editedMovie.title}</h3>
             {/* Poster */}
@@ -586,10 +597,10 @@ export function MovieDetailModal({
                   href={movie.trailer_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium gap-2"
+                  className="inline-block hover:opacity-80 transition-opacity"
+                  title="YouTube Trailer"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-5 h-5"><path d="M23.498 6.186a2.994 2.994 0 0 0-2.107-2.117C19.228 3.5 12 3.5 12 3.5s-7.228 0-9.391.569A2.994 2.994 0 0 0 .502 6.186C0 8.36 0 12 0 12s0 3.64.502 5.814a2.994 2.994 0 0 0 2.107 2.117C4.772 20.5 12 20.5 12 20.5s7.228 0 9.391-.569a2.994 2.994 0 0 0 2.107-2.117C24 15.64 24 12 24 12s0-3.64-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                  YouTube Trailer
+                  <img src="/buttons/04_trailer.png" alt="YouTube Trailer" className="h-10 w-auto" />
                 </a>
               )}
               {user && (
