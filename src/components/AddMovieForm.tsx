@@ -759,7 +759,24 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
       <div style={{ display: 'none' }}>
         <input id="description" value={description} readOnly tabIndex={-1} />
       </div>
-      {/* Content Type wird automatisch gesetzt (kein Dropdown mehr) */}
+      
+      {/* Content Type Dropdown */}
+      <div>
+        <label htmlFor="contentType" className="block text-sm font-medium text-gray-700 mb-2">
+          Typ
+        </label>
+        <select
+          id="contentType"
+          value={contentType}
+          onChange={(e) => setContentType(e.target.value as 'film' | 'serie' | 'buch')}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          disabled={isLoading}
+        >
+          <option value="film">🎬 Film</option>
+          <option value="serie">📺 Serie</option>
+          <option value="buch">📚 Buch</option>
+        </select>
+      </div>
 
       {/* Rating and Watchlist Section */}
       <div className="space-y-4">

@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react'
 import AddMovieForm from '@/components/AddMovieForm'
 import AuthForm from '@/components/AuthForm'
 import { UserHeader } from '@/components/UserHeader'
-import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { UserProvider, useUser } from '@/lib/UserContext'
 import { MovieDetailModal } from '@/components/MovieDetailModal'
 import { supabase } from '@/lib/supabase'
@@ -108,8 +107,6 @@ function AddContent() {
     <div className="min-h-screen bg-gray-50">
       <UserHeader />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} exclusive={true} />
-
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <AddMovieForm 
             selectedContentType={contentTypes} 
