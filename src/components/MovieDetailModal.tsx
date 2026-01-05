@@ -214,6 +214,58 @@ export function MovieDetailModal({
   const handleSave = async () => {
     setIsLoading(true);
     try {
+      // Helper: prüft, ob movie.id eine gültige UUID ist
+      function isValidUUID(id: string) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      }
+
+      let movieId = movie.id;
+
+      // Wenn movie.id keine UUID ist, Film in Supabase anlegen oder UUID holen
+      if (!isValidUUID(movieId)) {
+        let { data: existingMovies, error: movieFetchError } = await supabase
+          .from('movies')
+          .select('id')
+          .eq('tmdb_id', movie.tmdb_id)
+          .maybeSingle();
+        if (existingMovies && existingMovies.id) {
+          movieId = existingMovies.id;
+        } else {
+          // Hole ggf. weitere Metadaten aus TMDb
+          let details = {};
+          try {
+            const { getTMDbDetails } = await import('@/lib/tmdbApi');
+            details = await getTMDbDetails(Number(movie.tmdb_id), movie.media_type || 'movie');
+          } catch (err) {
+            details = {};
+          }
+          const insertPayload: any = {
+            title: movie.title,
+            description: movie.description || details.overview || null,
+            year: movie.year || (details.release_date ? Number((details.release_date as string).slice(0, 4)) : null),
+            poster_url: movie.poster_url || (details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null),
+            director: movie.director || (details as any).director || null,
+            actor: movie.actor || (details as any).actors || null,
+            trailer_url: movie.trailer_url || (details as any).trailerUrl || null,
+            tmdb_id: movie.tmdb_id,
+            media_type: movie.media_type || 'movie',
+            genre: Array.isArray((details as any).genres) ? (details as any).genres.map((g: any) => g.name) : null,
+            tmdb_keywords: (details as any).keywords || null,
+          };
+          const { data: newMovie, error: insertError } = await supabase
+            .from('movies')
+            .insert([insertPayload])
+            .select()
+            .single();
+          if (insertError || !newMovie) {
+            alert('Fehler beim Anlegen des Films in der Datenbank.');
+            setIsLoading(false);
+            return;
+          }
+          movieId = newMovie.id;
+        }
+      }
+
       // Prepare only allowed fields, remove empty strings and undefined
       const updatePayload: any = {
         title: editedMovie.title,
@@ -235,7 +287,7 @@ export function MovieDetailModal({
       const { error } = await supabase
         .from("movies")
         .update(updatePayload)
-        .eq("id", movie.id);
+        .eq("id", movieId);
       if (error) {
         console.error("Supabase update error:", error);
         alert("Fehler beim Aktualisieren des Films: " + (error.message || error.details || error.toString()));
@@ -245,12 +297,12 @@ export function MovieDetailModal({
 
       // --- Tag-Zuordnung aktualisieren ---
       // 1. Alle bisherigen Tags für diesen Film löschen
-      await supabase.from("movie_tags").delete().eq("movie_id", movie.id);
+      await supabase.from("movie_tags").delete().eq("movie_id", movieId);
       // 2. Neue Tags einfügen
       if (selectedTags.length > 0) {
         const tagInserts = selectedTags.map(tagName => {
           const tag = allTags.find(t => t.name === tagName);
-          return tag && tag.id ? { movie_id: movie.id, tag_id: tag.id } : undefined;
+          return tag && tag.id ? { movie_id: movieId, tag_id: tag.id } : undefined;
         }).filter((v): v is { movie_id: string; tag_id: string } => !!v);
         if (tagInserts.length > 0) {
           const { error: tagError } = await supabase.from("movie_tags").insert(tagInserts);
@@ -458,6 +510,9 @@ export function MovieDetailModal({
           movieId = newMovie.id;
         }
       }
+
+      // Nach Sicherstellung der UUID: movieId für alle Folgeoperationen verwenden
+      // (Optional: movie.id im Modal-Objekt updaten, falls du willst)
 
       // Check if user already rated this movie
       const { data: existingRating, error: fetchError } = await supabase

@@ -142,6 +142,21 @@ export function MovieList(props?: MovieListProps) {
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set())
   const [mergedRecommendations, setMergedRecommendations] = useState<any[]>([])
   const [discoverResults, setDiscoverResults] = useState<any[]>([])
+  const [dismissedDiscoveryIds, setDismissedDiscoveryIds] = useState<Set<string>>(new Set())
+    // Discovery: Lade dauerhaft verworfene Empfehlungen beim User-Wechsel
+    useEffect(() => {
+      const fetchDismissed = async () => {
+        if (!user) { setDismissedDiscoveryIds(new Set()); return; }
+        const { data, error } = await supabase
+          .from('dismissed_recommendations')
+          .select('movie_id')
+          .eq('user_id', user.id)
+        if (!error && data) {
+          setDismissedDiscoveryIds(new Set(data.map((row: any) => row.movie_id)))
+        }
+      }
+      fetchDismissed()
+    }, [user])
   const [isDiscoverLoading, setIsDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
 
@@ -1639,11 +1654,34 @@ export function MovieList(props?: MovieListProps) {
     }
   }
 
+  // Discovery: Filtere verworfene Empfehlungen raus
   const baseRecommendations = isDiscoverMode
-    ? discoverResults
+    ? discoverResults.filter(rec => {
+        const id = rec.movie.id || rec.movie.tmdb_id
+        return !dismissedDiscoveryIds.has(id)
+      })
     : isAIRecoMode
       ? aiCombinedResults
       : filterOutDismissed(recommendations)
+    // Discovery: X-Button zum dauerhaften Entfernen
+    const handleDismissDiscovery = async (rec: any) => {
+      if (!user) return
+      const movieId = rec.movie.id || rec.movie.tmdb_id
+      try {
+        // In DB speichern
+        const { error } = await supabase
+          .from('dismissed_recommendations')
+          .insert({ user_id: user.id, movie_id: movieId })
+        if (error && !String(error.message).includes('duplicate')) {
+          alert('Fehler beim Verwerfen: ' + (error.message || error.details))
+          return
+        }
+        setDismissedDiscoveryIds(prev => new Set(prev).add(movieId))
+        setDiscoverResults(prev => prev.filter(item => (item.movie.id || item.movie.tmdb_id) !== movieId))
+      } catch (err) {
+        alert('Fehler beim Verwerfen')
+      }
+    }
   const recommendationsLoading = isDiscoverMode
     ? isDiscoverLoading
     : isAIRecoMode
@@ -1689,9 +1727,19 @@ export function MovieList(props?: MovieListProps) {
                     })
                     .map((rec) => (
                       <div
-                        key={rec.movie.id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                        key={rec.movie.id || rec.movie.tmdb_id}
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative"
                       >
+                        {/* X-Button oben rechts */}
+                        {isDiscoverMode && (
+                          <button
+                            className="absolute top-2 right-2 z-10 text-gray-400 hover:text-red-500 text-xl font-bold bg-white/80 rounded-full w-8 h-8 flex items-center justify-center shadow"
+                            title="Empfehlung dauerhaft entfernen"
+                            onClick={e => { e.stopPropagation(); handleDismissDiscovery(rec); }}
+                          >
+                            ×
+                          </button>
+                        )}
                         <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
                           {/* Poster */}
                           {rec.movie.poster_url ? (
@@ -1752,31 +1800,31 @@ export function MovieList(props?: MovieListProps) {
                                 )}
                                 {/* Genres anzeigen, wenn gematcht */}
                                 {rec.matchReasons?.some((r: string) => r.includes('Genres')) && rec.movie.tags?.length > 0 && (
-                                  <div className="text-xs text-blue-800 font-semibold mb-0.5">
-                                    🎞️ Genres: {rec.movie.tags.filter(t => t.color === '#e5e7eb').map(t => t.name).join(', ')}
-                                  </div>
-                                )}
-                                {/* Keywords anzeigen, wenn gematcht */}
-                                {rec.matchReasons?.some((r: string) => r.includes('Keyword')) && rec.movie.tags?.length > 0 && (
-                                  <div className="text-xs font-semibold mb-0.5">
-                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).length > 0 && (
-                                      <span className="mr-1">🔑 Keywords:</span>
+                                  <>
+                                    <div className="text-xs text-blue-800 font-semibold mb-0.5">
+                                      🎞️ Genres: {rec.movie.tags.filter(t => t.color === '#e5e7eb').map(t => t.name).join(', ')}
+                                    </div>
+                                    {/* Keywords direkt unter Genre anzeigen, falls vorhanden */}
+                                    {rec.matchReasons?.some((r: string) => r.includes('Keyword')) && rec.movie.tags?.filter(t => t.id.startsWith('kw-')).length > 0 && (
+                                      <div className="text-xs font-semibold mb-0.5">
+                                        <span className="mr-1">🔑 Keywords:</span>
+                                        {rec.movie.tags.filter(t => t.id.startsWith('kw-')).map(t => (
+                                          <span
+                                            key={t.id}
+                                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-1 ${
+                                              t.color === '#10b981'
+                                                ? 'bg-green-200 text-green-900'
+                                                : t.color === '#fbbf24'
+                                                ? 'bg-yellow-200 text-yellow-900'
+                                                : 'bg-gray-200 text-gray-700'
+                                            }`}
+                                          >
+                                            {t.name}
+                                          </span>
+                                        ))}
+                                      </div>
                                     )}
-                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).map(t => (
-                                      <span
-                                        key={t.id}
-                                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-1 ${
-                                          t.color === '#10b981'
-                                            ? 'bg-green-200 text-green-900'
-                                            : t.color === '#fbbf24'
-                                            ? 'bg-yellow-200 text-yellow-900'
-                                            : 'bg-gray-200 text-gray-700'
-                                        }`}
-                                      >
-                                        {t.name}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  </>
                                 )}
                               </div>
                             )}
@@ -1838,9 +1886,7 @@ export function MovieList(props?: MovieListProps) {
                             )}
 
                             {/* Tags */}
-                            {rec.movie.tags.length > 0 && (
-                              <TagDisplay tags={rec.movie.tags} />
-                            )}
+                            {/* KEINE allgemeine Tag/Keyword-Anzeige mehr */}
 
                             {/* Average Rating */}
                             {rec.movie.averageRating > 0 && (
@@ -2645,6 +2691,10 @@ export function MovieList(props?: MovieListProps) {
           onMovieUpdated={async () => {
             await loadMovies()
             await loadWatchlist()
+            // Discovery: Entferne bewerteten Film sofort aus Vorschlagsliste
+            setDiscoverResults(prev => prev.filter(
+              rec => rec.movie.id !== selectedMovie.id && rec.movie.tmdb_id !== (selectedMovie as any).tmdb_id
+            ))
             setSelectedMovie(null)
           }}
           hideWatchlistFeature={true}
