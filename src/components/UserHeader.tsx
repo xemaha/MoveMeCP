@@ -23,10 +23,9 @@ export function UserHeader() {
         <div className="flex items-center justify-between py-3">
           <button
             onClick={() => router.push('/')}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+            className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
           >
-            <img src="/emova.png" alt="EMOVA Logo" className="h-12 w-auto" />
-            <span className="font-bold text-lg text-gray-900">EMOVA</span>
+            <img src="/buttons/00_logo_bild.png" alt="Logo" className="h-12 w-auto" />
           </button>
           
           {/* Navigation Buttons - Hidden on mobile, shown on md and up */}
