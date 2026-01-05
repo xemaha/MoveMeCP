@@ -1,15 +1,15 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react'
 import { Range } from 'react-range'
-import { supabase, Movie, Tag } from '@/lib/supabase'
-import { MovieDetailModal } from '@/components/MovieDetailModal'
-import { WatchProvidersDisplay } from '@/components/WatchProvidersDisplay'
-import { RecommendModal } from '@/components/RecommendModal'
-import { WhatsAppSuccessModal } from '@/components/WhatsAppSuccessModal'
+import React, { useState, useEffect, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
-import { generateRecommendations, findSimilarUsers, calculatePredictedRatings } from '@/lib/recommendations'
+import type { Movie, Tag } from '@/lib/types'
 import { loadPersonalRecommendations, mergeRecommendations } from '@/lib/personalRecommendations'
+import { generateRecommendations, calculatePredictedRatings } from '@/lib/recommendations'
+import TagDisplay from './TagDisplay'
+import { MovieDetailModal } from './MovieDetailModal'
+import type { DiscoveryFeature } from './DiscoveryFeatureFilter'
 
 // Types
 interface Rating {
@@ -69,48 +69,22 @@ interface MovieListProps {
     unavailable: boolean
   }
   recommendationSourceFilter?: 'all' | 'ai' | 'personal' | 'discover'
-}
-
-// Tag display component
-const TagDisplay: React.FC<{ tags: Tag[] }> = ({ tags }) => {
-  const [expanded, setExpanded] = useState(false)
-  
-  if (!tags?.length) return null
-  
-  const sortedTags = [...tags].sort((a, b) => a.name.localeCompare(b.name))
-  const visibleTags = expanded ? sortedTags : sortedTags.slice(0, 8)
-  const hasMore = sortedTags.length > visibleTags.length
-
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {visibleTags.map((tag) => (
-        <span
-          key={tag.id}
-          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-          style={{
-            backgroundColor: tag.color + '20',
-            color: tag.color
-          }}
-        >
-          {tag.name}
-        </span>
-      ))}
-      {hasMore && (
-        <button
-          className="ml-2 text-xs text-blue-600 underline hover:text-blue-800"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Weniger anzeigen' : 'Alle anzeigen'}
-        </button>
-      )}
-    </div>
-  )
+  discoveryFeatureFilter?: Record<DiscoveryFeature, boolean>
 }
 
 export function MovieList(props?: MovieListProps) {
-  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile, providerTypeFilter, recommendationSourceFilter = 'all' } = props || {}
+
+  // --- Modus-Flags direkt am Anfang deklarieren ---
+  const { defaultShowRecommendations = false, showOnlyRecommendations = false, hideRecommendations = false, contentTypeFilter, watchlistOnly = false, showPredictions = false, providerProfile, providerTypeFilter, recommendationSourceFilter = 'all', discoveryFeatureFilter } = props || {}
+  const isDiscoverMode = recommendationSourceFilter === 'discover'
+  const isAIRecoMode = recommendationSourceFilter === 'ai'
   const { user } = useUser()
-  
+
+  // --- UI: Button zum Anzeigen der erkannten Top-Keywords ---
+  // --- UI: Button zum Anzeigen der erkannten Präferenzen ---
+  const [showPrefsModal, setShowPrefsModal] = useState(false)
+  const [showKeywordModal, setShowKeywordModal] = useState(false)
+
   // Core state
   const [movies, setMovies] = useState<EnhancedMovie[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
@@ -118,7 +92,11 @@ export function MovieList(props?: MovieListProps) {
   const [watchlistMovies, setWatchlistMovies] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+  // Kombinierte AI/Discovery Empfehlungen (immer am Top-Level!)
+  // Die States werden immer initialisiert, unabhängig vom Modus
+  const [aiCombinedResults, setAICombinedResults] = useState<any[]>([])
+  const [isAIRecoLoading, setIsAIRecoLoading] = useState(false)
+
   // Filter state
   const [filters, setFilters] = useState<FilterSettings>({
     searchQuery: '',
@@ -133,11 +111,11 @@ export function MovieList(props?: MovieListProps) {
       buch: false
     }
   })
-  
+
   // Separate rating range for personal ratings
   const [myRatingMin, setMyRatingMin] = useState(0)
   const [myRatingMax, setMyRatingMax] = useState(5)
-  
+
   // UI state
   const [viewMode, setViewMode] = useState<'movie-based' | 'tag-based'>('movie-based')
   const [selectedMovie, setSelectedMovie] = useState<EnhancedMovie | null>(null)
@@ -152,13 +130,13 @@ export function MovieList(props?: MovieListProps) {
   const hasAutoCalcRecs = useRef(false)
   const [movieProviders, setMovieProviders] = useState<Map<string, any>>(new Map()) // movieId -> provider data
   const hasAutoDiscover = useRef(false)
-  
+
   // Recommend modal state
   const [recommendModalMovie, setRecommendModalMovie] = useState<EnhancedMovie | null>(null)
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
   const [whatsAppRecipients, setWhatsAppRecipients] = useState<string[]>([])
   const [whatsAppMovie, setWhatsAppMovie] = useState<EnhancedMovie | null>(null)
-  
+
   // Personal recommendations state
   const [personalRecommendations, setPersonalRecommendations] = useState<any[]>([])
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set())
@@ -166,65 +144,55 @@ export function MovieList(props?: MovieListProps) {
   const [discoverResults, setDiscoverResults] = useState<any[]>([])
   const [isDiscoverLoading, setIsDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
-  
+
   // Map: movie_id -> array of recommender names
   const [movieRecommenders, setMovieRecommenders] = useState<Map<string, string[]>>(new Map())
 
-  // Load dismissed recommendations per user from Supabase
-  const loadDismissedRecommendations = async () => {
-    if (!user) {
-      setDismissedRecommendationIds(new Set())
-      return
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('dismissed_recommendations')
-        .select('movie_id')
-        .eq('user_id', user.id)
-      
-      if (error) {
-        console.error('Error loading dismissed recommendations:', error)
+  // --- All useEffect hooks at the top level ---
+  useEffect(() => {
+    const loadDismissedRecommendations = async () => {
+      if (!user) {
+        setDismissedRecommendationIds(new Set())
         return
       }
-      
-      if (data) {
-        const movieIds = data.map(item => item.movie_id)
-        setDismissedRecommendationIds(new Set(movieIds))
-        console.log('Loaded', movieIds.length, 'dismissed recommendations')
+      try {
+        const { data, error } = await supabase
+          .from('dismissed_recommendations')
+          .select('movie_id')
+          .eq('user_id', user.id)
+        if (error) {
+          console.error('Error loading dismissed recommendations:', error)
+          return
+        }
+        if (data) {
+          const movieIds = data.map(item => item.movie_id)
+          setDismissedRecommendationIds(new Set(movieIds))
+          console.log('Loaded', movieIds.length, 'dismissed recommendations')
+        }
+      } catch (err) {
+        console.error('Error loading dismissed recommendations', err)
       }
-    } catch (err) {
-      console.error('Error loading dismissed recommendations', err)
     }
-  }
-
-  useEffect(() => {
     loadDismissedRecommendations()
   }, [user])
 
-  // Initialize data
   useEffect(() => {
     loadInitialData()
   }, [])
 
-  // Load watch providers for watchlist movies when providerProfile is active
   useEffect(() => {
     const loadProvidersForMovies = async () => {
       if (!watchlistOnly || !providerProfile || movieProviders.size > 0) return
       if (movies.length === 0) return
-      
       const watchlistMovieList = movies.filter(m => watchlistMovies.has(m.id))
       if (watchlistMovieList.length === 0) return
-      
       const { getWatchProviders, searchTMDb } = await import('@/lib/tmdbApi')
       const providersMap = new Map<string, any>()
-      
       await Promise.all(
         watchlistMovieList.slice(0, 30).map(async (movie) => {
           try {
             let tmdbId = (movie as any).tmdb_id
             let mediaType = (movie as any).media_type || 'movie'
-            
             if (!tmdbId) {
               const results = await searchTMDb(movie.title)
               if (results && results.length > 0) {
@@ -232,7 +200,6 @@ export function MovieList(props?: MovieListProps) {
                 mediaType = results[0].media_type || 'movie'
               }
             }
-            
             if (tmdbId) {
               const providers = await getWatchProviders(tmdbId, mediaType as 'movie' | 'tv')
               if (providers && Object.keys(providers).length > 0) {
@@ -244,10 +211,8 @@ export function MovieList(props?: MovieListProps) {
           }
         })
       )
-      
       setMovieProviders(providersMap)
     }
-    
     if (watchlistOnly && providerProfile && movies.length > 0) {
       loadProvidersForMovies()
     }
@@ -262,7 +227,6 @@ export function MovieList(props?: MovieListProps) {
     loadTagUsageStats()
   }, [movies])
 
-  // Auto-calculate recommendations when on recommendations page
   useEffect(() => {
     if (
       defaultShowRecommendations &&
@@ -276,7 +240,6 @@ export function MovieList(props?: MovieListProps) {
     }
   }, [defaultShowRecommendations, user, movies.length, recommendationSourceFilter])
 
-  // Auto-load discover when tab is selected
   useEffect(() => {
     if (
       recommendationSourceFilter === 'discover' &&
@@ -293,13 +256,69 @@ export function MovieList(props?: MovieListProps) {
     }
   }, [recommendationSourceFilter, user, isDiscoverLoading, discoverResults.length])
 
-  // Auto-calculate predictions for watchlist
   useEffect(() => {
     if (showPredictions && user && movies.length > 0) {
       const predictions = calculatePredictedRatings(user.id, movies)
       setPredictedRatings(predictions)
     }
   }, [showPredictions, user, movies.length])
+
+  // Remove/dismissed recommendations effect
+  useEffect(() => {
+    setRecommendations(prev => filterOutDismissed(prev))
+    setMergedRecommendations(prev => filterOutDismissed(prev))
+  }, [dismissedRecommendationIds])
+
+  // Trigger combined AI reco wenn ausgewählt
+  useEffect(() => {
+    // Hooks immer am Top-Level, keine Bedingungen um useState/useEffect!
+    if (isAIRecoMode && user && aiCombinedResults.length === 0 && !isAIRecoLoading) {
+      handleCombinedAIRecommendations()
+    }
+    if (!isAIRecoMode && aiCombinedResults.length > 0) {
+      setAICombinedResults([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAIRecoMode, user, movies])
+
+  // --- End of useEffect hooks ---
+
+  // Extrahiere die Top-Keywords, wie sie an die Discovery-API geschickt werden würden
+  // Hilfsfunktion: Zähle und sortiere Favoriten für eine Kategorie
+  function getPreferenceStats(field: 'genre' | 'director' | 'actor' | 'keywords') {
+    const stats: Record<string, { count5: number, count4: number, count3: number, total: number }> = {}
+    movies.forEach((movie) => {
+      const ratingObj = movie.ratings.find(r => r.user_id === user?.id)
+      if (!ratingObj) return
+      const rating = ratingObj.rating
+      if (rating < 3) return
+      let values: string[] = []
+      if (field === 'keywords') {
+        const keywordsData = (movie as any).keywords || (movie as any).tmdb_keywords
+        if (Array.isArray(keywordsData)) {
+          values = keywordsData.map((kw: any) => typeof kw === 'string' ? kw : kw.name).filter(Boolean)
+        }
+      } else if (field === 'genre') {
+        if (typeof movie.genre === 'string') {
+          values = movie.genre.split(',').map(g => g.trim()).filter(Boolean)
+        }
+      } else if (field === 'director') {
+        if (movie.director) values = movie.director.split(',').map((d: string) => d.trim()).filter(Boolean)
+      } else if (field === 'actor') {
+        if (movie.actor) values = movie.actor.split(',').map((a: string) => a.trim()).filter(Boolean)
+      }
+      values.forEach(val => {
+        if (!stats[val]) stats[val] = { count5: 0, count4: 0, count3: 0, total: 0 }
+        if (rating === 5) stats[val].count5++
+        if (rating === 4) stats[val].count4++
+        if (rating === 3) stats[val].count3++
+        stats[val].total++
+      })
+    })
+    // Sortierung: erst nach 5er, dann 4er, dann 3er, dann total
+    return Object.entries(stats)
+      .sort((a, b) => b[1].count5 - a[1].count5 || b[1].count4 - a[1].count4 || b[1].count3 - a[1].count3 || b[1].total - a[1].total)
+  }
 
   const loadInitialData = async () => {
     try {
@@ -316,6 +335,7 @@ export function MovieList(props?: MovieListProps) {
       setIsLoading(false)
     }
   }
+
 
   const loadMovies = async () => {
     try {
@@ -338,59 +358,134 @@ export function MovieList(props?: MovieListProps) {
 
       if (!moviesData) return
 
-    const enhancedMovies = await Promise.all(
-      moviesData
-        .filter(movie => movie.id) // Filter out movies without ID first
-        .map(async (movie) => {
-          const movieId = movie.id as string
+      // Dynamically import getTMDbDetails only if needed
 
-          const [ratingsResult, tagsResult] = await Promise.all([
-            supabase
-              .from('ratings')
-              .select('rating, user_name, user_id')
-              .eq('movie_id', movieId),
-            supabase
-              .from('movie_tags')
-              .select('tags(id, name, color, created_at)')
-              .eq('movie_id', movieId)
-          ])
+      const enhancedMovies = await Promise.all(
+        moviesData
+          .filter(movie => movie.id)
+          .map(async (movie) => {
+            const movieId = movie.id as string
+            const [ratingsResult, tagsResult] = await Promise.all([
+              supabase
+                .from('ratings')
+                .select('rating, user_name, user_id')
+                .eq('movie_id', movieId),
+              supabase
+                .from('movie_tags')
+                .select('tags(id, name, color, created_at)')
+                .eq('movie_id', movieId)
+            ])
+            const ratings = ratingsResult.data || []
+            const tags = tagsResult.data?.map((mt: any) => mt.tags).filter(Boolean) || []
+            const validRatings = ratings
+              .filter(r => r.rating !== null && r.rating !== undefined)
+              .map(r => Number(r.rating))
+              .filter(rating => !isNaN(rating) && rating >= 1 && rating <= 5)
+            const averageRating = validRatings.length > 0
+              ? validRatings.reduce((sum, rating) => sum + rating, 0) / validRatings.length
+              : 0
 
-          const ratings = ratingsResult.data || []
-          const tags = tagsResult.data?.map((mt: any) => mt.tags).filter(Boolean) || []
-          
-          // Ensure ratings are properly typed and filtered
-          const validRatings = ratings
-            .filter(r => r.rating !== null && r.rating !== undefined)
-            .map(r => Number(r.rating))
-            .filter(rating => !isNaN(rating) && rating >= 1 && rating <= 5)
-          
-          const averageRating = validRatings.length > 0
-            ? validRatings.reduce((sum, rating) => sum + rating, 0) / validRatings.length
-            : 0
+            // TMDb-Update-Logik entfernt
 
-          return {
-            ...movie,
-            id: movieId, // Explicitly ensure id is set
-            tags,
-            averageRating,
-            ratingCount: validRatings.length,
-            ratings: ratings
-              .filter(r => r.rating !== null && r.rating !== undefined && r.user_name && r.user_id)
-              .map(r => ({
-                rating: Number(r.rating),
-                user_name: r.user_name as string,
-                user_id: r.user_id as string
-              }))
-          } as EnhancedMovie
-        })
-    )
+            return {
+              ...movie,
+              id: movieId,
+              tags,
+              averageRating,
+              ratingCount: validRatings.length,
+              ratings: ratings
+                .filter(r => r.rating !== null && r.rating !== undefined && r.user_name && r.user_id)
+                .map(r => ({
+                  rating: Number(r.rating),
+                  user_name: r.user_name as string,
+                  user_id: r.user_id as string
+                })),
+              keywords: (movie as any).tmdb_keywords,
+              director: (movie as any).director,
+              actor: (movie as any).actor,
+              trailer_url: (movie as any).trailer_url,
+              media_type: (movie as any).media_type || (movie.content_type === 'serie' ? 'tv' : 'movie')
+            } as EnhancedMovie
+          })
+      )
 
       setMovies(enhancedMovies)
+      
+      // TMDb-Update-Logik entfernt
     } catch (err) {
       console.error('Exception in loadMovies:', err)
       setError('Fehler beim Laden der Filme')
     }
   }
+
+  // Schritt 1: Nachschlagen fehlender TMDb-IDs basierend auf Filmtitel
+  const lookupMissingTMDbIds = async (movies: EnhancedMovie[]) => {
+    if (!user) return
+    
+    console.log('🔍 Starting to lookup missing TMDb IDs...')
+    
+    try {
+      const { searchTMDb } = await import('@/lib/tmdbApi')
+      
+      // Finde Filme ohne TMDb-ID
+      const moviesWithoutTmdbId = movies.filter(m => !((m as any).tmdb_id))
+      console.log(`Found ${moviesWithoutTmdbId.length} movies without TMDb IDs`)
+      
+      if (moviesWithoutTmdbId.length === 0) {
+        console.log('✓ All movies have TMDb IDs!')
+        return
+      }
+      
+      let updatedCount = 0
+      for (const movie of moviesWithoutTmdbId) {
+        try {
+          console.log(`Searching for TMDb ID: ${movie.title}...`)
+          const results = await searchTMDb(movie.title)
+          
+          if (results && results.length > 0) {
+            const bestMatch = results[0] // Nehme das erste Ergebnis
+            const tmdb_id = bestMatch.id
+            const media_type = bestMatch.media_type || 'movie'
+            
+            console.log(`✓ Found: ${movie.title} → tmdb_id=${tmdb_id}, media_type=${media_type}`)
+            
+            // Speichere die TMDb-ID in der Datenbank
+            const { error } = await supabase
+              .from('movies')
+              .update({ tmdb_id, media_type })
+              .eq('id', movie.id)
+            
+            if (!error) {
+              updatedCount++
+              console.log(`✓ Saved TMDb ID for: ${movie.title}`)
+            } else {
+              console.warn(`Failed to save TMDb ID for ${movie.title}:`, error)
+            }
+          } else {
+            console.warn(`No TMDb results found for: ${movie.title}`)
+          }
+          
+          // Verzögerung: 300ms zwischen requests für API-Rate-Limits
+          await new Promise(resolve => setTimeout(resolve, 300))
+        } catch (err) {
+          console.warn(`Error searching for ${movie.title}:`, err)
+        }
+      }
+      
+      console.log(`✓ TMDb ID lookup completed! Updated ${updatedCount}/${moviesWithoutTmdbId.length} movies`)
+      
+      // Reload movies nach ID-Update
+      if (updatedCount > 0) {
+        console.log('Reloading movies with new TMDb IDs...')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        loadMovies()
+      }
+    } catch (err) {
+      console.error('Error in lookupMissingTMDbIds:', err)
+    }
+  }
+
+  // persistMissingMetadataForRatedMovies entfernt
 
   const loadTags = async () => {
     try {
@@ -709,31 +804,55 @@ export function MovieList(props?: MovieListProps) {
       return movie.id
     }
 
-    const tmdbId = (movie as any).tmdb_id
-    if (!tmdbId) return movie.id || null
+    // Versuche, tmdb_id zu holen und als String/Number zu akzeptieren
+    let tmdbId = movie.tmdb_id
+    if (typeof tmdbId === 'string' && tmdbId.match(/^\d+$/)) tmdbId = Number(tmdbId)
+    if (!tmdbId || tmdbId === 'undefined' || tmdbId === 'null') tmdbId = undefined
 
-    // Try to find existing by tmdb_id, then upsert if missing
+    // Versuche, bestehenden Film per tmdb_id zu finden
     try {
-      const { data: existing, error: selectError } = await supabase
-        .from('movies')
-        .select('id')
-        .eq('tmdb_id', tmdbId)
-        .maybeSingle()
-
-      if (!selectError && existing?.id) return existing.id as string
-
-      const insertPayload: any = {
-        title: movie.title,
-        description: movie.description || null,
-        content_type: movie.content_type || 'film',
-        created_by: user?.id || null,
-        trailer_url: movie.trailer_url || null,
-        poster_url: movie.poster_url || null,
-        tmdb_id: tmdbId,
-        media_type: movie.media_type || 'movie',
-        director: movie.director || null,
-        actor: movie.actor || null
+      let existing: any = null
+      if (tmdbId) {
+        const res = await supabase
+          .from('movies')
+          .select('id')
+          .eq('tmdb_id', tmdbId)
+          .maybeSingle()
+        existing = res.data
+        if (!res.error && existing?.id) return existing.id as string
       }
+
+      // Fallback: Suche per normalisiertem Titel, falls keine tmdb_id
+      let fallbackId: string | null = null
+      if (!tmdbId && movie.title) {
+        const { data: titleMatch, error: titleError } = await supabase
+          .from('movies')
+          .select('id')
+          .ilike('title', movie.title.trim())
+          .maybeSingle()
+        if (!titleError && titleMatch?.id) fallbackId = titleMatch.id as string
+      }
+      if (fallbackId) return fallbackId
+
+      // Hole alle Felder wie beim AddMovieForm, lasse optionale Felder weg
+      const insertPayload: any = {
+        title: movie.title?.trim() || 'Unbekannt',
+        description: movie.description?.trim() || null,
+        content_type: movie.content_type || (movie.media_type === 'tv' ? 'serie' : 'film'),
+        created_by: user?.name || user?.id || 'System',
+        poster_url: movie.poster_url || null,
+        director: movie.director || null,
+        actor: movie.actor || null,
+        year: movie.year ? Number(movie.year) : null,
+        genre: movie.genre || null,
+        trailer_url: movie.trailer_url || null,
+        tmdb_id: tmdbId || null,
+        media_type: movie.media_type || 'movie',
+      }
+      // Entferne Felder, die undefined sind
+      Object.keys(insertPayload).forEach(k => {
+        if (insertPayload[k] === undefined) delete insertPayload[k]
+      })
 
       const { data: upserted, error: upsertError } = await supabase
         .from('movies')
@@ -742,13 +861,15 @@ export function MovieList(props?: MovieListProps) {
         .single()
 
       if (upsertError) {
-        console.error('Error upserting discover movie', upsertError)
+        console.error('Error upserting discover movie', upsertError, insertPayload)
+        alert('Fehler beim Speichern des Films: ' + (upsertError.message || upsertError.details || 'Unbekannter Fehler'))
         return null
       }
 
       return upserted?.id as string
     } catch (err) {
-      console.error('ensureMovieExists error', err)
+      console.error('ensureMovieExists error', err, movie)
+      alert('Fehler beim Speichern des Films: ' + (err?.message || err?.details || 'Unbekannter Fehler'))
       return null
     }
   }
@@ -873,11 +994,6 @@ export function MovieList(props?: MovieListProps) {
       alert('Konnte Empfehlung nicht löschen')
     }
   }
-
-  useEffect(() => {
-    setRecommendations(prev => filterOutDismissed(prev))
-    setMergedRecommendations(prev => filterOutDismissed(prev))
-  }, [dismissedRecommendationIds])
 
   const handleRecommendClick = (movie: EnhancedMovie) => {
     if (!user) {
@@ -1138,8 +1254,10 @@ export function MovieList(props?: MovieListProps) {
       }
 
       // Collect keywords from TMDb metadata if available
-      if ((movie as any).keywords) {
-        const keywords = (movie as any).keywords
+      // Prüfe BEIDE Quellen: keywords (im State) und tmdb_keywords (von der Datenbank)
+      const keywordsData = (movie as any).keywords || (movie as any).tmdb_keywords
+      if (keywordsData) {
+        const keywords = keywordsData
         if (Array.isArray(keywords)) {
           keywords.forEach(kw => {
             const name = (typeof kw === 'string' ? kw : kw.name || '').toLowerCase()
@@ -1149,14 +1267,18 @@ export function MovieList(props?: MovieListProps) {
       }
     })
 
+    // Regisseure: Schon ab 1x >4 Sterne als "leicht interessant"
     const preferredDirectors = Array.from(directorStats.entries())
+      .filter(([_, stats]) => stats.count >= 1 && (stats.sum / stats.count) > 4)
       .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))
-      .slice(0, 5)
+      .slice(0, 10)
       .map(([name, stats]) => ({ name, count: stats.count }))
 
+    // Schauspieler: Ab 2x >4 Sterne als "gemocht"
     const preferredActors = Array.from(actorStats.entries())
+      .filter(([_, stats]) => stats.count >= 2 && (stats.sum / stats.count) > 4)
       .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 7)
+      .slice(0, 15)
       .map(([name]) => name)
 
     const preferredGenres = Array.from(tagCounts.entries())
@@ -1169,19 +1291,25 @@ export function MovieList(props?: MovieListProps) {
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }))
 
-    const excludeTmdbIds = movies
+    // Exclude: bereits bewertet, Watchlist, dismissed
+    const ratedTmdbIds = movies
+      .filter(m => m.ratings.some(r => r.user_id === user.id))
       .map(m => (m as any).tmdb_id)
       .filter((id): id is number => typeof id === 'number')
 
-    // Also exclude dismissed recommendations that have tmdb_id
+    const watchlistTmdbIds = movies
+      .filter(m => watchlistMovies.has(m.id))
+      .map(m => (m as any).tmdb_id)
+      .filter((id): id is number => typeof id === 'number')
+
     const dismissedTmdbIds = Array.from(dismissedRecommendationIds)
       .map(movieId => {
         const movie = movies.find(m => m.id === movieId)
         return movie ? (movie as any).tmdb_id : null
       })
       .filter((id): id is number => typeof id === 'number')
-    
-    const allExcludedIds = [...new Set([...excludeTmdbIds, ...dismissedTmdbIds])]
+
+    const allExcludedIds = [...new Set([...ratedTmdbIds, ...watchlistTmdbIds, ...dismissedTmdbIds])]
 
     // Detect which media types user has rated
     const hasMovies = movies.some(m => m.content_type === 'film' || m.content_type === 'movie')
@@ -1191,11 +1319,12 @@ export function MovieList(props?: MovieListProps) {
     if (hasSeries) mediaTypes.push('tv')
     if (mediaTypes.length === 0) mediaTypes.push('movie') // default
 
+    // Feature-Filter anwenden
     return {
-      preferredDirectors,
-      preferredActors,
-      preferredGenres,
-      preferredKeywords,
+      preferredDirectors: discoveryFeatureFilter?.directors !== false ? preferredDirectors : [],
+      preferredActors: discoveryFeatureFilter?.actors !== false ? preferredActors : [],
+      preferredGenres: discoveryFeatureFilter?.genres !== false ? preferredGenres : [],
+      preferredKeywords: discoveryFeatureFilter?.keywords !== false ? preferredKeywords : [],
       excludeTmdbIds: allExcludedIds,
       mediaTypes
     }
@@ -1332,50 +1461,58 @@ export function MovieList(props?: MovieListProps) {
       }
 
       const mapped = (data.results || []).map(mapDiscoverResult)
-      
-      // Primary filter: exclude rated, watchlist, dismissed, and approx title duplicates
+
+      // --- Verbesserte Filterlogik mit Fallbacks ---
       const ratedMovies = movies.filter(m => m.ratings.some(r => r.user_id === user.id))
-      const allTmdbIds = new Set(
-        movies
-          .map(m => (m as any).tmdb_id)
-          .filter((id): id is number => typeof id === 'number')
+      const ratedTmdbIds = new Set(
+        ratedMovies.map(m => String((m as any).tmdb_id || '').trim()).filter(id => id && id !== 'undefined' && id !== 'null')
       )
-      const ratedMovieIds = new Set(
-        ratedMovies
-          .map(m => (m as any).tmdb_id)
-          .filter((id): id is number => typeof id === 'number')
-      )
-
       const ratedTitlesNormalized = new Set(
-        ratedMovies
-          .map(m => m.title)
-          .filter(Boolean)
-          .map(normalizeTitle)
+        ratedMovies.map(m => m.title).filter(Boolean).map(normalizeTitle)
       )
-      
-      const primary = mapped.filter(rec => {
-        const tmdbId = rec.movie.tmdb_id
+      const allTmdbIds = new Set(
+        movies.map(m => String((m as any).tmdb_id || '').trim()).filter(id => id && id !== 'undefined' && id !== 'null')
+      )
+
+      // 1. Streng: Nur echte Keyword-Matches
+      let primary = mapped.filter(rec => {
+        const tmdbId = String(rec.movie.tmdb_id || '').trim()
         const movieId = rec.movie.id
-        const titleConflict = isApproxSameTitle(rec.movie.title, ratedTitlesNormalized)
-         return !ratedMovieIds.has(tmdbId) &&
-           !allTmdbIds.has(tmdbId) &&
-           !titleConflict &&
-           !watchlistMovies.has(movieId) && 
-           !dismissedRecommendationIds.has(movieId)
+        const titleNorm = normalizeTitle(rec.movie.title)
+        const isRated = ratedTmdbIds.has(tmdbId) || ratedTitlesNormalized.has(titleNorm)
+        const isDuplicate = allTmdbIds.has(tmdbId)
+        // Mindestens ein Keyword-Match
+        const hasKeywordMatch = (rec.movie.tags || []).some(t => t.id.startsWith('kw-'))
+        return !isRated && !isDuplicate && !watchlistMovies.has(movieId) && !dismissedRecommendationIds.has(movieId) && hasKeywordMatch
       })
 
-      // Fallback: allow rated/watchlist duplicates only if we have fewer than 20
-      const secondary = mapped.filter(rec => {
-        // keep order but skip anything already in primary
-        const alreadyInPrimary = primary.some(p => p.movie.id === rec.movie.id)
-        if (alreadyInPrimary) return false
-        // still respect dismissed to avoid resurfacing hidden items
-        const movieId = rec.movie.id
-        return !dismissedRecommendationIds.has(movieId)
-      })
+      // 2. Locker: Genre-Matches zulassen, falls zu wenig Treffer
+      if (primary.length < 10) {
+        primary = mapped.filter(rec => {
+          const tmdbId = String(rec.movie.tmdb_id || '').trim()
+          const movieId = rec.movie.id
+          const titleNorm = normalizeTitle(rec.movie.title)
+          const isRated = ratedTmdbIds.has(tmdbId) || ratedTitlesNormalized.has(titleNorm)
+          const isDuplicate = allTmdbIds.has(tmdbId)
+          // Mindestens ein Genre- oder Keyword-Match
+          const hasGenreOrKeyword = (rec.movie.tags || []).some(t => t.color === '#e5e7eb' || t.id.startsWith('kw-'))
+          return !isRated && !isDuplicate && !watchlistMovies.has(movieId) && !dismissedRecommendationIds.has(movieId) && hasGenreOrKeyword
+        })
+      }
 
-      const combined = [...primary, ...secondary].slice(0, 20)
-      setDiscoverResults(combined)
+      // 3. Fallback: Alles, was nicht ausgeschlossen ist
+      if (primary.length < 5) {
+        primary = mapped.filter(rec => {
+          const tmdbId = String(rec.movie.tmdb_id || '').trim()
+          const movieId = rec.movie.id
+          const titleNorm = normalizeTitle(rec.movie.title)
+          const isRated = ratedTmdbIds.has(tmdbId) || ratedTitlesNormalized.has(titleNorm)
+          const isDuplicate = allTmdbIds.has(tmdbId)
+          return !isRated && !isDuplicate && !watchlistMovies.has(movieId) && !dismissedRecommendationIds.has(movieId)
+        })
+      }
+
+      setDiscoverResults(primary.slice(0, 20))
       setShowRecommendations(true)
     } catch (err: any) {
       console.error('Discover error', err)
@@ -1433,9 +1570,85 @@ export function MovieList(props?: MovieListProps) {
   }
 
   const availableTagsWithCounts = getAvailableTagsWithCounts()
-  const isDiscoverMode = recommendationSourceFilter === 'discover'
-  const baseRecommendations = isDiscoverMode ? discoverResults : filterOutDismissed(recommendations)
-  const recommendationsLoading = isDiscoverMode ? isDiscoverLoading : isCalculatingRecommendations
+
+  // Kombinierte Empfehlungen: Discovery + AI (ähnliche Nutzer)
+  const handleCombinedAIRecommendations = async () => {
+    if (!user) return
+    setIsAIRecoLoading(true)
+    setDiscoverError(null)
+    try {
+      // 1. Discovery Empfehlungen holen
+      const payload = buildDiscoverPayload()
+      let discovery: any[] = []
+      if (payload) {
+        const response = await fetch('/api/discover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        const raw = await response.text()
+        let data: any = {}
+        try { data = raw ? JSON.parse(raw) : {} } catch {}
+        if (response.ok && Array.isArray(data.results)) {
+          discovery = (data.results || []).map(mapDiscoverResult)
+        }
+      }
+      // 2. AI Empfehlungen (ähnliche Nutzer)
+      const recs = generateRecommendations(user.id, movies, 20)
+      // recs: [{ movie, predictedRating, ... }]
+      const ai = recs.map(r => ({
+        movie: r.movie,
+        source: 'ai',
+        isPersonal: false,
+        predictedRating: r.predictedRating,
+        score: r.predictedRating * 2, // Skaliere auf 10er Score für Vergleichbarkeit
+        matchReasons: r.basedOnUsers?.length ? [`🤖 Ähnliche Nutzer: ${r.basedOnUsers.join(', ')}`] : [],
+        scoreBreakdown: [],
+        mostSimilarUserName: r.mostSimilarUserName,
+        mostSimilarUserRating: r.mostSimilarUserRating,
+        ...r
+      }))
+      // 3. Kombinieren, deduplizieren (nach tmdb_id oder normalisiertem Titel)
+      const seen = new Set<string>()
+      const norm = (title: string) => title?.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const all = [...discovery, ...ai].filter(rec => {
+        const id = String((rec.movie.tmdb_id || '')).trim() || norm(rec.movie.title)
+        if (seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+      // 4. Score: Mittelwert, falls in beiden Quellen, sonst Score der jeweiligen Quelle
+      const merged = all.map(rec => {
+        const disc = discovery.find(d => d.movie.tmdb_id === rec.movie.tmdb_id)
+        const aiRec = ai.find(a => a.movie.tmdb_id === rec.movie.tmdb_id)
+        if (disc && aiRec) {
+          // Kombiniere Score (gewichteter Mittelwert)
+          const score = (disc.score * 0.6 + aiRec.score * 0.4)
+          return { ...rec, score, matchReasons: [...(disc.matchReasons||[]), ...(aiRec.matchReasons||[])] }
+        }
+        return rec
+      })
+      // 5. Sortieren nach Score, Top 20
+      merged.sort((a, b) => (b.score || 0) - (a.score || 0))
+      setAICombinedResults(merged.slice(0, 20))
+      setShowRecommendations(true)
+    } catch (err: any) {
+      setDiscoverError(err?.message || 'Konnte AI-Empfehlungen nicht laden')
+    } finally {
+      setIsAIRecoLoading(false)
+    }
+  }
+
+  const baseRecommendations = isDiscoverMode
+    ? discoverResults
+    : isAIRecoMode
+      ? aiCombinedResults
+      : filterOutDismissed(recommendations)
+  const recommendationsLoading = isDiscoverMode
+    ? isDiscoverLoading
+    : isAIRecoMode
+      ? isAIRecoLoading
+      : isCalculatingRecommendations
 
   return (
     <div className="space-y-6">
@@ -1495,52 +1708,73 @@ export function MovieList(props?: MovieListProps) {
                             </div>
                           )}
                           
-                            <div className="p-4">
+                          <div className="p-4">
                             {/* Title and Source Badge */}
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="text-lg font-semibold text-gray-900 truncate flex-1">
                                 {rec.movie.title}
                               </h3>
-                              <div className="flex items-center gap-2">
-                                {rec.source === 'personal' ? (
-                                  <span className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                                    👥 {rec.recommenders?.join(', ')}
-                                  </span>
-                                ) : rec.source === 'discover' ? (
-                                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                                    🔎 Discover
-                                  </span>
-                                ) : (
-                                  <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
-                                    🤖 KI
-                                  </span>
-                                )}
-
-                                {user && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleRemoveRecommendation(rec)
-                                    }}
-                                    className="w-7 h-7 inline-flex items-center justify-center rounded-full bg-red-100 text-red-600 hover:bg-red-200 text-xs font-bold"
-                                    title="Empfehlung entfernen"
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
+                              {rec.source && (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  rec.source === 'ai' 
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : rec.source === 'personal'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : rec.source === 'discover'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {rec.source === 'ai' ? '🤖 AI' : rec.source === 'personal' ? '👤 Personal' : rec.source === 'discover' ? '🔍 Discover' : rec.source}
+                                </span>
+                              )}
                             </div>
-                            
-                            {/* Predicted Match - only show for AI recommendations */}
-                            {rec.predictedRating > 0 && (
+
+                            {/* Match-Gründe und gematchte Kategorien für Discover */}
+                            {rec.source === 'discover' && (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
                                 <div className="text-xs text-green-700 font-medium mb-1">
-                                  💚 {Math.round((rec.predictedRating / 5) * 100)}% Match
+                                  💚 {rec.predictedRating > 0 ? Math.round((rec.predictedRating / 5) * 100) : Math.round((rec.score / 10) * 100)}% Match
                                 </div>
                                 {rec.matchReasons?.length > 0 && (
-                                  <div className="text-xs text-green-800 space-y-0.5">
+                                  <div className="text-xs text-green-800 space-y-0.5 mb-1">
                                     {rec.matchReasons.map((reason: string, idx: number) => (
                                       <div key={idx}>{reason}</div>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Regisseur anzeigen, wenn gematcht */}
+                                {rec.matchReasons?.some((r: string) => r.includes('Regie')) && rec.movie.director && (
+                                  <div className="text-xs text-blue-800 font-semibold mb-0.5">🎬 Regie: {rec.movie.director}</div>
+                                )}
+                                {/* Schauspieler anzeigen, wenn gematcht */}
+                                {rec.matchReasons?.some((r: string) => r.includes('Stars')) && rec.movie.actor && (
+                                  <div className="text-xs text-blue-800 font-semibold mb-0.5">🎭 Schauspiel: {rec.movie.actor}</div>
+                                )}
+                                {/* Genres anzeigen, wenn gematcht */}
+                                {rec.matchReasons?.some((r: string) => r.includes('Genres')) && rec.movie.tags?.length > 0 && (
+                                  <div className="text-xs text-blue-800 font-semibold mb-0.5">
+                                    🎞️ Genres: {rec.movie.tags.filter(t => t.color === '#e5e7eb').map(t => t.name).join(', ')}
+                                  </div>
+                                )}
+                                {/* Keywords anzeigen, wenn gematcht */}
+                                {rec.matchReasons?.some((r: string) => r.includes('Keyword')) && rec.movie.tags?.length > 0 && (
+                                  <div className="text-xs font-semibold mb-0.5">
+                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).length > 0 && (
+                                      <span className="mr-1">🔑 Keywords:</span>
+                                    )}
+                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).map(t => (
+                                      <span
+                                        key={t.id}
+                                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-1 ${
+                                          t.color === '#10b981'
+                                            ? 'bg-green-200 text-green-900'
+                                            : t.color === '#fbbf24'
+                                            ? 'bg-yellow-200 text-yellow-900'
+                                            : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                      >
+                                        {t.name}
+                                      </span>
                                     ))}
                                   </div>
                                 )}
@@ -1652,15 +1886,15 @@ export function MovieList(props?: MovieListProps) {
                         )}
                       </div>
                     ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="text-sm text-gray-600">
-                {isDiscoverMode
-                  ? 'Noch keine Discover-Ergebnisse. Klicke auf „Discover laden“.'
-                  : 'Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!'}
-              </div>
-            )}
+              ) : (
+                <div className="text-sm text-gray-600">
+                  {isDiscoverMode
+                    ? 'Noch keine Discover-Ergebnisse. Klicke auf „Discover laden“.'
+                    : 'Keine Empfehlungen gefunden. Bewerte mehr Filme, um bessere Empfehlungen zu erhalten!'}
+                </div>
+              )}
           </div>
         ) : (
           <div className="p-4 rounded-lg border-2 border-green-200 bg-green-50">
@@ -2434,6 +2668,85 @@ export function MovieList(props?: MovieListProps) {
           recipients={whatsAppRecipients}
           onClose={handleWhatsAppModalClose}
         />
+      )}
+
+      {/* Präferenzen-Button außerhalb der Empfehlungen */}
+      {user && (
+        <div className="mt-4 flex justify-center">
+          <button
+            className="bg-green-100 text-green-800 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-200 transition"
+            onClick={() => setShowPrefsModal(true)}
+          >
+            💡 Zeige meine Präferenzen
+          </button>
+        </div>
+      )}
+
+      {/* Präferenzen-Modal */}
+      {showPrefsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full relative max-h-[80vh] overflow-y-auto">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              onClick={() => setShowPrefsModal(false)}
+            >
+              ×
+            </button>
+            <h2 className="text-lg font-bold mb-4">Deine Präferenzen</h2>
+            <div className="mb-4">
+              <h3 className="font-semibold text-green-700 mb-1">🎞️ Genres</h3>
+              <ul className="list-disc pl-5 space-y-1">
+                {getPreferenceStats('genre').map(([genre, stat]) => (
+                  <li key={genre} className="text-gray-700">
+                    <span className="font-semibold">{genre}</span>
+                    <span className="ml-2 text-yellow-600">{stat.count5 > 0 && `${stat.count5}x ★★★★★ `}</span>
+                    <span className="ml-1 text-yellow-500">{stat.count4 > 0 && `${stat.count4}x ★★★★`}</span>
+                    <span className="ml-1 text-yellow-400">{stat.count3 > 0 && `${stat.count3}x ★★★`}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="mb-4">
+              <h3 className="font-semibold text-green-700 mb-1">🎬 Regie</h3>
+              <ul className="list-disc pl-5 space-y-1">
+                {getPreferenceStats('director').map(([dir, stat]) => (
+                  <li key={dir} className="text-gray-700">
+                    <span className="font-semibold">{dir}</span>
+                    <span className="ml-2 text-yellow-600">{stat.count5 > 0 && `${stat.count5}x ★★★★★ `}</span>
+                    <span className="ml-1 text-yellow-500">{stat.count4 > 0 && `${stat.count4}x ★★★★`}</span>
+                    <span className="ml-1 text-yellow-400">{stat.count3 > 0 && `${stat.count3}x ★★★`}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="mb-4">
+              <h3 className="font-semibold text-green-700 mb-1">🎭 Schauspiel</h3>
+              <ul className="list-disc pl-5 space-y-1">
+                {getPreferenceStats('actor').map(([actor, stat]) => (
+                  <li key={actor} className="text-gray-700">
+                    <span className="font-semibold">{actor}</span>
+                    <span className="ml-2 text-yellow-600">{stat.count5 > 0 && `${stat.count5}x ★★★★★ `}</span>
+                    <span className="ml-1 text-yellow-500">{stat.count4 > 0 && `${stat.count4}x ★★★★`}</span>
+                    <span className="ml-1 text-yellow-400">{stat.count3 > 0 && `${stat.count3}x ★★★`}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="mb-2">
+              <h3 className="font-semibold text-green-700 mb-1">🔑 Keywords</h3>
+              <ul className="list-disc pl-5 space-y-1">
+                {getPreferenceStats('keywords').map(([kw, stat]) => (
+                  <li key={kw} className="text-gray-700">
+                    <span className="font-semibold">{kw}</span>
+                    <span className="ml-2 text-yellow-600">{stat.count5 > 0 && `${stat.count5}x ★★★★★ `}</span>
+                    <span className="ml-1 text-yellow-500">{stat.count4 > 0 && `${stat.count4}x ★★★★`}</span>
+                    <span className="ml-1 text-yellow-400">{stat.count3 > 0 && `${stat.count3}x ★★★`}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

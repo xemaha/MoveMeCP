@@ -354,6 +354,38 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
         console.log('Neuer Eintrag erstellt');
       }
 
+      // --- NEU: TMDb-ID und Metadaten nachtragen ---
+      try {
+        // Hole aktuellen Movie aus DB
+        const { data: movieRow } = await supabase.from('movies').select('*').eq('id', movieId).single();
+        let tmdbId = movieRow?.tmdb_id;
+        let mediaType = movieRow?.media_type || 'movie';
+        // Falls keine TMDb-ID vorhanden: Suche per Titel
+        if (!tmdbId) {
+          const tmdbResults = await searchTMDb(title.trim());
+          if (tmdbResults && tmdbResults.length > 0) {
+            tmdbId = tmdbResults[0].id;
+            mediaType = tmdbResults[0].media_type || 'movie';
+            await supabase.from('movies').update({ tmdb_id: tmdbId, media_type: mediaType }).eq('id', movieId);
+            console.log('✓ TMDb-ID nachgetragen:', tmdbId, 'MediaType:', mediaType);
+          }
+        }
+        // Falls TMDb-ID vorhanden: Lade Metadaten
+        if (tmdbId) {
+          const details = await getTMDbDetails(Number(tmdbId), mediaType);
+          const tmdb_keywords = details.keywords || [];
+          const directorDb = details.director || movieRow?.director || null;
+          const actorDb = (details.actors || movieRow?.actor || '').toString();
+          const trailer_urlDb = details.trailerUrl || movieRow?.trailer_url || null;
+          // Genre als Array extrahieren
+          const genreDb = Array.isArray(details.genres) ? details.genres.map((g: any) => g.name) : [];
+          await supabase.from('movies').update({ tmdb_keywords, director: directorDb, actor: actorDb, trailer_url: trailer_urlDb, genre: genreDb }).eq('id', movieId);
+          console.log('✓ TMDb-Metadaten nachgetragen:', { tmdb_keywords, directorDb, actorDb, trailer_urlDb, genreDb });
+        }
+      } catch (err) {
+        console.warn('Fehler beim Nachtragen von TMDb-ID/Metadaten:', err);
+      }
+
       // Type guard: Ensure movieId is defined before proceeding
       if (!movieId) {
         throw new Error('Movie ID is missing - cannot proceed with ratings, watchlist, or tags');

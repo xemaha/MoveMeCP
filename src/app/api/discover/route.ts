@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
     mediaTypes = ['movie']
   } = body || {}
 
+  // Feature-Flags: Wenn ein Array leer ist, wird das Feature ignoriert
+  const useDirectors = Array.isArray(preferredDirectors) && preferredDirectors.length > 0
+  const useActors = Array.isArray(preferredActors) && preferredActors.length > 0
+  const useGenres = Array.isArray(preferredGenres) && preferredGenres.length > 0
+  const useKeywords = Array.isArray(preferredKeywords) && preferredKeywords.length > 0
+
   try {
     // Map Genre-Namen auf IDs (best effort, toLowerCase)
     const genreIds = preferredGenres
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
       api_key: TMDB_API_KEY,
       sort_by: 'popularity.desc',
       'vote_average.gte': '6.0',
-      'vote_count.gte': '100',
+      'vote_count.gte': '1000',
       include_adult: 'false'
     })
     if (genreIds.length > 0) {
@@ -85,7 +91,7 @@ export async function POST(req: NextRequest) {
         }
         const data = await res.json()
         const candidates = (data.results || [])
-          .filter((c: any) => (c.vote_count || 0) >= 100 && (c.vote_average || 0) >= 6.0)
+          .filter((c: any) => (c.vote_count || 0) >= 1000 && (c.vote_average || 0) >= 6.0)
           .map((c: any) => ({ ...c, media_type: mediaType }))
           .filter((c: any) => !excludeTmdbIds.includes(c.id))
 
@@ -117,80 +123,86 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Scoring: Director stark, Genre mittel, Actors leicht
+    // Scoring: Nur aktivierte Features bestimmen das Ranking
     const scored = enriched.map(({ base, details }) => {
       const director = details.director || ''
       const actors = (details.actors || '').split(',').map((a: string) => a.trim()).filter(Boolean)
       const genres: string[] = (details.genres || []).map((g: any) => (g.name as string).toLowerCase())
       const keywords: string[] = details.keywords || []
 
-      const baseScore = (base.vote_average || 0) * 0.6 + (base.popularity || 0) * 0.01 + Math.log1p(base.vote_count || 0) * 0.3
-      let score = baseScore
-
+      let score = 0
       const matchReasons: string[] = []
       const scoreBreakdown: string[] = []
 
-      // TMDb baseline
-      scoreBreakdown.push(`Basis: ${baseScore.toFixed(2)} (TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'}, ${base.vote_count} Stimmen)`)
-
-      // Director matching with name extraction from payload
-      const preferredDirectorNames = preferredDirectors.map((d: any) => 
-        typeof d === 'string' ? d.toLowerCase() : d.name?.toLowerCase?.()
-      ).filter(Boolean)
-      
-      if (director && preferredDirectorNames.includes(director.toLowerCase())) {
-        const boost = 5
-        score += boost
-        matchReasons.push(`🎬 Regie (du magst): ${director}`)
-        scoreBreakdown.push(`+ ${boost} (Regie-Match)`)
+      // Director
+      if (useDirectors) {
+        const preferredDirectorNames = preferredDirectors.map((d: any) => 
+          typeof d === 'string' ? d.toLowerCase() : d.name?.toLowerCase?.()
+        ).filter(Boolean)
+        if (director && preferredDirectorNames.includes(director.toLowerCase())) {
+          const boost = 5
+          score += boost
+          matchReasons.push(`🎬 Regie (du magst): ${director}`)
+          scoreBreakdown.push(`+ ${boost} (Regie-Match)`)
+        }
       }
 
-      const prefActors = preferredActors.map((a) => a.toLowerCase())
-      const matchedActors = actors.filter((a: string) => prefActors.includes(a.toLowerCase()))
-      if (matchedActors.length > 0) {
-        const boost = matchedActors.length * 0.8
-        score += boost
-        matchReasons.push(`🎭 Stars: ${matchedActors.slice(0, 3).join(', ')}`)
-        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedActors.length} bekannte*r Schauspieler*in)`)
+      // Actors
+      let matchedActors: string[] = []
+      if (useActors) {
+        const prefActors = preferredActors.map((a) => a.toLowerCase())
+        matchedActors = actors.filter((a: string) => prefActors.includes(a.toLowerCase()))
+        if (matchedActors.length > 0) {
+          const boost = matchedActors.length * 0.8
+          score += boost
+          matchReasons.push(`🎭 Stars: ${matchedActors.slice(0, 3).join(', ')}`)
+          scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedActors.length} bekannte*r Schauspieler*in)`)
+        }
       }
 
-      const prefGenres = preferredGenres.map((g) => g.toLowerCase())
-      const matchedGenres = genres.filter((g) => prefGenres.includes(g))
-      if (matchedGenres.length > 0) {
-        const boost = matchedGenres.length * 2.0
-        score += boost
-        matchReasons.push(`🎞️ Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
-        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedGenres.length} Genre-Match)`)
+      // Genres
+      let matchedGenres: string[] = []
+      if (useGenres) {
+        const prefGenres = preferredGenres.map((g) => g.toLowerCase())
+        matchedGenres = genres.filter((g) => prefGenres.includes(g))
+        if (matchedGenres.length > 0) {
+          const boost = matchedGenres.length * 2.0
+          score += boost
+          matchReasons.push(`🎞️ Genres: ${matchedGenres.slice(0, 3).join(', ')}`)
+          scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedGenres.length} Genre-Match)`)
+        }
       }
 
-      // Match keywords with user's preferred keywords from highly-rated movies
-      // Build frequency map for color coding
-      const keywordFrequencyMap: Record<string, number> = {}
-      preferredKeywords.forEach((k: any) => {
-        const name = typeof k === 'string' ? k : k.name
-        const count = typeof k === 'string' ? 1 : (k.count || 1)
-        keywordFrequencyMap[name.toLowerCase()] = count
-      })
-      
-      const prefKeywords = preferredKeywords.map((k: any) => 
-        typeof k === 'string' ? k.toLowerCase() : k.name?.toLowerCase?.()
-      ).filter(Boolean)
-      
-      const matchedKeywords = keywords.filter((k) => prefKeywords.includes(k))
-      const keywordFrequencies: Record<string, number> = {}
-      matchedKeywords.forEach(k => {
-        keywordFrequencies[k] = keywordFrequencyMap[k] || 1
-      })
-      
-      if (matchedKeywords.length > 0) {
-        const boost = matchedKeywords.length * 3.0
-        score += boost
-        matchReasons.push(`🔑 Keywords: ${matchedKeywords.slice(0, 3).join(', ')}`)
-        scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedKeywords.length} Keyword-Match aus deinen Top-Filmen)`)
+      // Keywords
+      let matchedKeywords: string[] = []
+      let keywordFrequencies: Record<string, number> = {}
+      if (useKeywords) {
+        // Match keywords with user's preferred keywords from highly-rated movies
+        // Build frequency map for color coding
+        const keywordFrequencyMap: Record<string, number> = {}
+        preferredKeywords.forEach((k: any) => {
+          const name = typeof k === 'string' ? k : k.name
+          const count = typeof k === 'string' ? 1 : (k.count || 1)
+          keywordFrequencyMap[name.toLowerCase()] = count
+        })
+        const prefKeywords = preferredKeywords.map((k: any) => 
+          typeof k === 'string' ? k.toLowerCase() : k.name?.toLowerCase?.()
+        ).filter(Boolean)
+        matchedKeywords = keywords.filter((k) => prefKeywords.includes(k))
+        keywordFrequencies = {}
+        matchedKeywords.forEach(k => {
+          keywordFrequencies[k] = keywordFrequencyMap[k] || 1
+        })
+        if (matchedKeywords.length > 0) {
+          const boost = matchedKeywords.length * 3.0
+          score += boost
+          matchReasons.push(`🔑 Keywords: ${matchedKeywords.slice(0, 3).join(', ')}`)
+          scoreBreakdown.push(`+ ${boost.toFixed(2)} (${matchedKeywords.length} Keyword-Match aus deinen Top-Filmen)`)
+        }
       }
 
       if (matchReasons.length === 0) {
-        matchReasons.push(`⭐ Hochbewertet: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} (${base.vote_count} Stimmen)`)
+        matchReasons.push(`⭐ Hochbewertet: TMDb ${base.vote_average?.toFixed?.(1) ?? '7+'} (${base.vote_count} Stimmen) (nur als Fallback)`)
       }
 
       scoreBreakdown.push(`= Gesamt: ${score.toFixed(2)}`)
@@ -218,9 +230,19 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    // Sortierung: Nur nach Feature-Score, nicht nach TMDb-Score
     scored.sort((a, b) => b.score - a.score)
 
-    return NextResponse.json({ results: scored.slice(0, 400) })
+    // Immer exakt 20 Empfehlungen zurückgeben, ggf. auffüllen
+    let results = scored.filter(s => s.score > 0)
+    if (results.length < 20) {
+      // Mit weiteren Kandidaten auffüllen (nach TMDb-Score, aber nur wenn sie Filter bestehen)
+      const fallback = scored.filter(s => s.score === 0).slice(0, 20 - results.length)
+      results = results.concat(fallback)
+    }
+    results = results.slice(0, 20)
+
+    return NextResponse.json({ results })
   } catch (err) {
     console.error('Discover error', err)
     return NextResponse.json({ error: 'Discover failed' }, { status: 500 })

@@ -112,6 +112,7 @@ export function MovieCard({ movie }: MovieCardProps) {
         )}
       </div>
 
+
       {movie.description && (
         <p className="text-gray-600 mb-3">{movie.description}</p>
       )}

@@ -8,6 +8,7 @@ import { MovieList } from '@/components/MovieList'
 import { ContentTypeFilter } from '@/components/ContentTypeFilter'
 import { RecommendationSourceFilter } from '@/components/RecommendationSourceFilter'
 import { useState } from 'react'
+import { DiscoveryFeatureFilter, DiscoveryFeature } from '@/components/DiscoveryFeatureFilter'
 
 function RecommendationsContent() {
   const { user, isLoading } = useUser()
@@ -17,6 +18,13 @@ function RecommendationsContent() {
     buch: false
   })
   const [recommendationSource, setRecommendationSource] = useState<'all' | 'ai' | 'personal' | 'discover'>('all')
+  // Discovery-Feature-Filter State
+  const [discoveryFeatures, setDiscoveryFeatures] = useState<Record<DiscoveryFeature, boolean>>({
+    genres: true,
+    directors: true,
+    actors: true,
+    keywords: true
+  })
 
   if (isLoading) {
     return (
@@ -38,15 +46,18 @@ function RecommendationsContent() {
       <UserHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         <ContentTypeFilter selected={contentTypes} onChange={setContentTypes} />
-        
         <RecommendationSourceFilter selected={recommendationSource} onChange={setRecommendationSource} />
-
+        {/* Discovery-Feature-Filter nur für Discover-Tab anzeigen */}
+        {recommendationSource === 'discover' && (
+          <DiscoveryFeatureFilter selected={discoveryFeatures} onChange={setDiscoveryFeatures} />
+        )}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <MovieList 
             defaultShowRecommendations 
             showOnlyRecommendations 
             contentTypeFilter={contentTypes}
             recommendationSourceFilter={recommendationSource}
+            discoveryFeatureFilter={discoveryFeatures}
           />
         </div>
       </main>

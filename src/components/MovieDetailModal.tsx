@@ -68,8 +68,54 @@ export function MovieDetailModal({
   };
 
   const [tagUsageCount, setTagUsageCount] = useState<Record<string, number>>({});
+  // For keyword color-coding
+  const [keywordStats, setKeywordStats] = useState<Record<string, { count3: number; count4: number }>>({});
   const [watchProviders, setWatchProviders] = useState<any>(null);
 
+  // Fetch keyword stats for color-coding (user's rating history)
+  useEffect(() => {
+    async function fetchKeywordStats() {
+      if (!user) return;
+      // Query: For each keyword, how many movies has the user rated >=3 and >4 stars with that keyword?
+      // This assumes keywords are stored as tags with a certain prefix or in a separate table; adjust as needed.
+      // We'll use the tags on the movie and the ratings table.
+      // For all movies the user rated >=3, collect all keywords/tags, count frequency.
+      // For all movies the user rated >4, collect all keywords/tags, count frequency.
+      // We'll use the 'tags' field on movies, assuming keywords are a subset of tags.
+      // This is a simplified approach; for more accuracy, join movie_tags, tags, ratings.
+      const { data, error } = await supabase
+        .from('ratings')
+        .select('movie_id, rating')
+        .eq('user_id', user.id)
+        .gte('rating', 3);
+      if (error || !data) return;
+      // Get all movie_ids rated >=3
+      const movieIds3 = data.map((r: any) => r.movie_id);
+      const movieRatings: Record<string, number> = {};
+      data.forEach((r: any) => { movieRatings[r.movie_id] = r.rating; });
+      // Now fetch tags for these movies
+      if (movieIds3.length === 0) { setKeywordStats({}); return; }
+      const { data: tagData, error: tagError } = await supabase
+        .from('movie_tags')
+        .select('movie_id, tags(name)')
+        .in('movie_id', movieIds3);
+      if (tagError || !tagData) return;
+      const stats: Record<string, { count3: number; count4: number }> = {};
+      tagData.forEach((row: any) => {
+        const kw = row.tags?.name;
+        if (!kw) return;
+        // Count for >=3
+        stats[kw] = stats[kw] || { count3: 0, count4: 0 };
+        stats[kw].count3 += 1;
+        // Count for >4
+        if ((movieRatings[row.movie_id] || 0) > 4) {
+          stats[kw].count4 += 1;
+        }
+      });
+      setKeywordStats(stats);
+    }
+    if (isOpen) fetchKeywordStats();
+  }, [isOpen, user]);
   useEffect(() => {
     const fetchTagUsage = async () => {
       const { data, error } = await supabase
@@ -146,6 +192,15 @@ export function MovieDetailModal({
       fetchAllTags();
     }
   }, [isOpen, movie]);
+
+  // Helper for keyword color
+  function getKeywordColor(keyword: string) {
+    const stat = keywordStats[keyword];
+    if (!stat) return '#9ca3af'; // gray
+    if (stat.count4 >= 3) return '#10b981'; // green
+    if (stat.count3 >= 3) return '#fbbf24'; // yellow
+    return '#9ca3af';
+  }
 
   const fetchAllTags = async () => {
     try {
@@ -350,12 +405,65 @@ export function MovieDetailModal({
       return;
     }
 
+    // Helper: prüft, ob movie.id eine gültige UUID ist
+    function isValidUUID(id: string) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    }
+
+    let movieId = movie.id;
+
     try {
+      // Wenn movie.id keine UUID ist, Film in Supabase anlegen
+      if (!isValidUUID(movieId)) {
+        // Prüfe, ob Film mit tmdb_id schon existiert
+        let { data: existingMovies, error: movieFetchError } = await supabase
+          .from('movies')
+          .select('id')
+          .eq('tmdb_id', movie.tmdb_id)
+          .maybeSingle();
+        if (existingMovies && existingMovies.id) {
+          movieId = existingMovies.id;
+        } else {
+          // Hole ggf. weitere Metadaten aus TMDb
+          let details = {};
+          try {
+            const { getTMDbDetails } = await import('@/lib/tmdbApi');
+            details = await getTMDbDetails(Number(movie.tmdb_id), movie.media_type || 'movie');
+          } catch (err) {
+            // Fallback: nur Basisdaten
+            details = {};
+          }
+          const insertPayload: any = {
+            title: movie.title,
+            description: movie.description || details.overview || null,
+            year: movie.year || (details.release_date ? Number((details.release_date as string).slice(0, 4)) : null),
+            poster_url: movie.poster_url || (details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null),
+            director: movie.director || (details as any).director || null,
+            actor: movie.actor || (details as any).actors || null,
+            trailer_url: movie.trailer_url || (details as any).trailerUrl || null,
+            tmdb_id: movie.tmdb_id,
+            media_type: movie.media_type || 'movie',
+            genre: Array.isArray((details as any).genres) ? (details as any).genres.map((g: any) => g.name) : null,
+            tmdb_keywords: (details as any).keywords || null,
+          };
+          const { data: newMovie, error: insertError } = await supabase
+            .from('movies')
+            .insert([insertPayload])
+            .select()
+            .single();
+          if (insertError || !newMovie) {
+            alert('Fehler beim Anlegen des Films in der Datenbank.');
+            return;
+          }
+          movieId = newMovie.id;
+        }
+      }
+
       // Check if user already rated this movie
       const { data: existingRating, error: fetchError } = await supabase
         .from('ratings')
         .select('id')
-        .eq('movie_id', movie.id)
+        .eq('movie_id', movieId)
         .eq('user_id', user.id)
         .single();
 
@@ -377,7 +485,7 @@ export function MovieDetailModal({
           .from('ratings')
           .insert([
             {
-              movie_id: movie.id,
+              movie_id: movieId,
               rating: rating,
               user_id: user.id,
               user_name: user.name,
@@ -634,16 +742,19 @@ export function MovieDetailModal({
               <div className="text-base text-gray-700 whitespace-pre-line mt-2"><span className="font-semibold">Description:</span> {editedMovie.description}</div>
             )}
           {/* Tag selection and rest of modal follows... */}
-            {/* Tag selection */}
+            {/* Tag selection with keyword color-coding */}
             <div className="flex flex-wrap gap-2">
               {(showAllTags ? selectedTags : selectedTags.slice(0, 20)).map(tagName => {
                 const tag = allTags.find(t => t.name === tagName);
+                // If tag is a keyword (heuristic: not a genre, or you can add a flag to Tag), color it by user stats
+                // For now, color all tags by keyword logic if not found in allTags or if tag.color is gray
+                const color = tag?.color && tag.color !== '#e5e7eb' ? tag.color : getKeywordColor(tagName);
                 return (
                   <button
                     key={tagName}
                     onClick={() => toggleTag(tagName)}
                     className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium text-white hover:opacity-80 transition-opacity"
-                    style={{ backgroundColor: tag?.color || '#6B7280' }}
+                    style={{ backgroundColor: color }}
                   >
                     {tagName}
                     <span className="text-xs">✕</span>
