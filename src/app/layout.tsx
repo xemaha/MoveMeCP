@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   description: "Filme bewerten und entdecken",
   manifest: "/manifest.json",
   icons: [
-    { rel: "icon", url: "/buttons/00_logo_bild.png" },
-    { rel: "apple-touch-icon", url: "/buttons/00_logo_bild.png" }
+    { rel: "icon", url: "/buttons/00_logo_bild_square.png" },
+    { rel: "apple-touch-icon", url: "/buttons/00_logo_bild_square.png" }
   ]
 };
 
@@ -35,8 +35,8 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/buttons/00_logo_bild.png" />
-        <link rel="apple-touch-icon" href="/buttons/00_logo_bild.png" />
+        <link rel="icon" href="/buttons/00_logo_bild_square.png" />
+        <link rel="apple-touch-icon" href="/buttons/00_logo_bild_square.png" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
