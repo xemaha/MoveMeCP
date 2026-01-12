@@ -1,5 +1,6 @@
 
 "use client";
+import { WhatsAppSuccessModal } from './WhatsAppSuccessModal'
 import { RecommendModal } from './RecommendModal'
 
 import { Range } from 'react-range'
@@ -1043,10 +1044,10 @@ export function MovieList(props?: MovieListProps) {
     setRecommendModalMovie(movie)
   }
 
-  const handleRecommendSuccess = (recipients: string[]) => {
+  const handleRecommendSuccess = (movie: EnhancedMovie, recipients: string[]) => {
     setRecommendModalMovie(null)
     setWhatsAppRecipients(recipients)
-    setWhatsAppMovie(recommendModalMovie)
+    setWhatsAppMovie(movie)
     setShowWhatsAppModal(true)
   }
 
@@ -2646,7 +2647,7 @@ export function MovieList(props?: MovieListProps) {
           movie={recommendModalMovie}
           currentUserId={user.id}
           onClose={() => setRecommendModalMovie(null)}
-          onSuccess={handleRecommendSuccess}
+          onSuccess={(recipients) => handleRecommendSuccess(recommendModalMovie, recipients)}
         />
       )}
 
