@@ -8,7 +8,6 @@ export function BottomNavBar() {
   const pathname = usePathname()
   const { user } = useUser()
 
-  if (!user) return null
 
   const navigationItems = [
     { label: 'Hinzufügen', path: '/add', image: '/buttons/01_add.png' },
@@ -31,7 +30,7 @@ export function BottomNavBar() {
           </button>
         </div>
         {/* Vier Buttons rechtsbündig und näher zusammen */}
-        <div className="flex gap-3 flex-1 justify-end">
+        <div className="flex gap-4 flex-1 justify-end">
           {navigationItems.map(item => (
             <button
               key={item.path}
@@ -44,8 +43,8 @@ export function BottomNavBar() {
               <img
                 src={item.image}
                 alt={item.label}
-                className="max-h-12 w-auto"
-                style={{ display: 'block', maxHeight: '3rem', width: 'auto' }}
+                className="max-h-16 w-auto"
+                style={{ display: 'block', maxHeight: '4rem', width: 'auto' }}
                 draggable={false}
               />
             </button>
