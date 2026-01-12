@@ -10,7 +10,7 @@ export function RecommendationSourceFilter({ selected, onChange }: Recommendatio
     { value: 'all' as const, label: 'Alle Empfehlungen', image: '/buttons/05_all_filter.png' },
     { value: 'ai' as const, label: 'KI-Empfehlungen', image: '/buttons/05_ai_reco_filter.png' },
     { value: 'personal' as const, label: 'Von Freundinnen', image: '/buttons/05_friends_reco_filter.png' },
-    { value: 'discover' as const, label: 'Discover new movies', image: null }
+    { value: 'discover' as const, label: 'Discover new movies (beta)', image: null }
   ]
 
   return (
