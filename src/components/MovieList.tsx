@@ -1,4 +1,6 @@
+
 "use client";
+import { RecommendModal } from './RecommendModal'
 
 import { Range } from 'react-range'
 import React, { useState, useEffect, useRef } from 'react'
