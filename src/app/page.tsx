@@ -27,7 +27,7 @@ function LandingContent() {
     {
       href: '/add',
       title: 'Add new',
-      description: 'Neuen Film, Serie oder Buch hinzufügen',
+      description: 'Neuen Film, Serie oder Buch hinzufügen und empfehlen',
       image: '/buttons/01_add.png',
       color: 'bg-blue-50 border-blue-200 hover:border-blue-300'
     },

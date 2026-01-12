@@ -43,8 +43,8 @@ export function BottomNavBar() {
               <img
                 src={item.image}
                 alt={item.label}
-                className="max-h-16 w-auto"
-                style={{ display: 'block', maxHeight: '4rem', width: 'auto' }}
+                className="max-h-20 w-auto sm:max-h-16"
+                style={{ display: 'block', maxHeight: '5rem', width: 'auto' }}
                 draggable={false}
               />
             </button>
