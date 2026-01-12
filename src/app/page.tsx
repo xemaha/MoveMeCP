@@ -34,7 +34,7 @@ function LandingContent() {
     {
       href: '/search',
       title: 'Search Database',
-      description: 'Stöbere und filtere in deiner Sammlung und den Sammlungen deiner friends',
+      description: 'Stöbere und filtere tags und Bewertungen in deiner Sammlung und den Sammlungen deiner friends',
       image: '/buttons/01_search.png',
       color: 'bg-green-50 border-green-200 hover:border-green-300'
     },

@@ -20,19 +20,25 @@ export function BottomNavBar() {
     <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#fcfcfd] border-t shadow-md" style={{ borderTopColor: '#e5e5e5' }}>
       <div className="max-w-2xl mx-auto flex flex-row items-center justify-between py-4 px-4">
         {/* Home Button ganz links */}
-        <div className="flex-1 flex justify-start">
+        <div className="flex-1 flex justify-start pr-8 items-center"> {/* pr-8 für mehr Abstand */}
           <button
             onClick={() => router.push('/')}
             className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
             aria-label="Home"
+            style={{ minWidth: 0 }}
           >
-            <img src="/buttons/00_logo_bild.png" alt="Logo" className="h-12 w-auto" />
+            <img
+              src="/buttons/00_logo_bild.png"
+              alt="Logo"
+              className="h-14 w-auto"
+              style={{ display: 'block', maxHeight: '3.5rem', width: 'auto', minHeight: 40, minWidth: 40 }}
+              draggable={false}
+            />
           </button>
         </div>
         {/* Vier Buttons rechtsbündig und näher zusammen */}
         <div
-          className="flex flex-1 justify-end gap-2 sm:gap-4"
-          style={{ alignItems: 'center', height: '100%' }}
+          className="flex flex-1 justify-end gap-3 sm:gap-5 items-center"
         >
           {navigationItems.map(item => (
             <button
@@ -49,11 +55,11 @@ export function BottomNavBar() {
                 className="w-auto"
                 style={{
                   display: 'block',
-                  maxHeight: 'calc(64px + 4vw)', // dynamisch, aber limitiert
-                  minHeight: 40,
-                  maxWidth: 72,
-                  marginTop: 2,
-                  marginBottom: 2,
+                  maxHeight: '3.2rem',
+                  minHeight: 36,
+                  maxWidth: 60,
+                  marginTop: 4,
+                  marginBottom: 4,
                 }}
                 draggable={false}
               />
