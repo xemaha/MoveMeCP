@@ -19,25 +19,31 @@ export function BottomNavBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 w-full z-50 bg-[#fcfcfd] border-t shadow-md" style={{ borderTopColor: '#e5e5e5' }}>
-      <div className="max-w-2xl mx-auto flex justify-around items-center py-2">
-        <button
-          onClick={() => router.push('/')}
-          className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
-          aria-label="Home"
-        >
-          <img src="/buttons/00_logo_bild.png" alt="Logo" className="h-10 w-auto" />
-        </button>
-        {navigationItems.map(item => (
+      <div className="max-w-2xl mx-auto flex flex-row items-center justify-between py-4 px-4">
+        {/* Home Button ganz links */}
+        <div className="flex-1 flex justify-start">
           <button
-            key={item.path}
-            onClick={() => router.push(item.path)}
-            className={`hover:opacity-80 transition-opacity ${pathname === item.path ? 'opacity-100' : 'opacity-70'}`}
-            title={item.label}
-            aria-label={item.label}
+            onClick={() => router.push('/')}
+            className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
+            aria-label="Home"
           >
-            <img src={item.image} alt={item.label} className="h-10 w-auto" />
+            <img src="/buttons/00_logo_bild.png" alt="Logo" className="h-12 w-auto" />
           </button>
-        ))}
+        </div>
+        {/* Vier Buttons rechtsbündig und näher zusammen */}
+        <div className="flex gap-2 flex-1 justify-end">
+          {navigationItems.map(item => (
+            <button
+              key={item.path}
+              onClick={() => router.push(item.path)}
+              className={`hover:opacity-80 transition-opacity ${pathname === item.path ? 'opacity-100' : 'opacity-70'}`}
+              title={item.label}
+              aria-label={item.label}
+            >
+              <img src={item.image} alt={item.label} className="h-10 w-auto" />
+            </button>
+          ))}
+        </div>
       </div>
     </nav>
   )
