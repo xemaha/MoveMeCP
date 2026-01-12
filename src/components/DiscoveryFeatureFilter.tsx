@@ -41,7 +41,7 @@ export function DiscoveryFeatureFilter({ selected, onChange }: DiscoveryFeatureF
           </button>
         ))}
       </div>
-      <p className="text-xs text-gray-500 mt-3">Wähle, welche Merkmale für die Empfehlungen genutzt werden. Änderungen laden Discover automatisch neu.</p>
+      <p className="text-xs text-gray-500 mt-3">Wähle, welche Merkmale für die Empfehlungen genutzt werden sollen.</p>
     </div>
   )
 }
