@@ -923,9 +923,6 @@ export function MovieDetailModal({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center space-x-3">
                   <StarRating rating={userRating} onRate={handleStarClick} disabled={false} />
-                  <span className="text-sm text-gray-600">
-                    {userRating > 0 ? `${userRating} Sterne` : 'Noch nicht bewertet'}
-                  </span>
                   {userRating > 0 && (
                     <button
                       onClick={handleDeleteRating}

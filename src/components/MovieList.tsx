@@ -2526,11 +2526,6 @@ export function MovieList(props?: MovieListProps) {
                         onRate={(rating) => handleRating(movie, rating)} 
                         disabled={false} 
                       />
-                      <span className="text-sm text-gray-600">
-                        {getUserRating(movie.ratings, user.id) > 0 
-                          ? `${getUserRating(movie.ratings, user.id)} Sterne` 
-                          : 'Noch nicht bewertet'}
-                      </span>
                       {getUserRating(movie.ratings, user.id) > 0 && (
                         <button
                           onClick={() => handleDeleteRating(movie.id)}
