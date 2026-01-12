@@ -27,7 +27,7 @@ function LandingContent() {
     {
       href: '/add',
       title: 'Add new',
-      description: 'Neuen Film, Serie oder Buch hinzufügen und empfehlen',
+      description: 'Neuen Film, Serie oder Buch hinzufügen und direkt watchlisten, bewerten oder empfehlen',
       image: '/buttons/01_add.png',
       color: 'bg-blue-50 border-blue-200 hover:border-blue-300'
     },
@@ -48,7 +48,7 @@ function LandingContent() {
     {
       href: '/watchlist',
       title: 'My Watch/Readlist',
-      description: 'Alles was du noch sehen oder lesen willst schnell verfügbar',
+      description: 'Alles was du noch sehen oder lesen willst schnell inkl Verfügbarkeit auf DEINEN Plattformen',
       image: '/buttons/01_watchlist.png',
       color: 'bg-orange-50 border-orange-200 hover:border-orange-300'
     }

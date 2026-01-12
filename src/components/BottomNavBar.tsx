@@ -30,21 +30,31 @@ export function BottomNavBar() {
           </button>
         </div>
         {/* Vier Buttons rechtsbündig und näher zusammen */}
-        <div className="flex gap-4 flex-1 justify-end">
+        <div
+          className="flex flex-1 justify-end gap-2 sm:gap-4"
+          style={{ alignItems: 'center', height: '100%' }}
+        >
           {navigationItems.map(item => (
             <button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className={`hover:opacity-80 transition-opacity ${pathname === item.path ? 'opacity-100' : 'opacity-70'} p-0 flex items-center`}
+              className={`hover:opacity-80 transition-opacity ${pathname === item.path ? 'opacity-100' : 'opacity-70'} flex items-center p-0`}
               title={item.label}
               aria-label={item.label}
-              style={{ minWidth: 0 }}
+              style={{ minWidth: 0, paddingTop: 4, paddingBottom: 4 }}
             >
               <img
                 src={item.image}
                 alt={item.label}
-                className="max-h-20 w-auto sm:max-h-16"
-                style={{ display: 'block', maxHeight: '5rem', width: 'auto' }}
+                className="w-auto"
+                style={{
+                  display: 'block',
+                  maxHeight: 'calc(64px + 4vw)', // dynamisch, aber limitiert
+                  minHeight: 40,
+                  maxWidth: 72,
+                  marginTop: 2,
+                  marginBottom: 2,
+                }}
                 draggable={false}
               />
             </button>
