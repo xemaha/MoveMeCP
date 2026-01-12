@@ -30,8 +30,8 @@ export function BottomNavBar() {
             <img
               src="/buttons/00_logo_bild.png"
               alt="Logo"
-              className="h-14 w-auto"
-              style={{ display: 'block', maxHeight: '3.5rem', width: 'auto', minHeight: 40, minWidth: 40 }}
+              className="max-h-14 w-auto object-contain"
+              style={{ display: 'block', maxHeight: '3.5rem', width: 'auto', aspectRatio: 'auto' }}
               draggable={false}
             />
           </button>
