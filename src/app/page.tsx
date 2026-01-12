@@ -48,7 +48,7 @@ function LandingContent() {
     {
       href: '/watchlist',
       title: 'My Watch/Readlist',
-      description: 'Alles was du noch sehen oder lesen willst schnell inkl Verfügbarkeit auf DEINEN Plattformen',
+      description: 'Alles was du noch sehen oder lesen willst, inklusive Verfügbarkeit auf deinen individuellen Plattformen',
       image: '/buttons/01_watchlist.png',
       color: 'bg-orange-50 border-orange-200 hover:border-orange-300'
     }
