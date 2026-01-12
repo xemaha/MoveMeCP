@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useUser } from '@/lib/UserContext'
 import { searchTMDb, getTMDbDetails } from '@/lib/tmdbApi'
 import { searchGoogleBooks } from '@/lib/googleBooksApi'
+import { StarRating } from './StarRating'
 import type { MovieDetails } from '@/lib/types'
 
 interface MovieSuggestion {
@@ -817,20 +818,7 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Bewertung
           </label>
-          <div className="flex space-x-1">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <button
-                key={star}
-                type="button"
-                onClick={() => setRating(star)}
-                className={`w-8 h-8 ${
-                  star <= rating ? 'text-yellow-400' : 'text-gray-300'
-                } hover:text-yellow-400 transition-colors`}
-              >
-                ★
-              </button>
-            ))}
-          </div>
+          <StarRating rating={rating} onRate={setRating} disabled={isLoading} size="medium" />
         </div>
 
         {/* Review Text */}

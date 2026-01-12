@@ -6,6 +6,7 @@ import { useUser } from "@/lib/UserContext";
 import { WatchProvidersDisplay } from "./WatchProvidersDisplay";
 import { RecommendModal } from "./RecommendModal";
 import { WhatsAppSuccessModal } from "./WhatsAppSuccessModal";
+import { StarRating } from "./StarRating";
 
 interface MovieWithDetails extends Movie {
   tags: Tag[];
@@ -457,7 +458,6 @@ export function MovieDetailModal({
       return;
     }
 
-    // Helper: prüft, ob movie.id eine gültige UUID ist
     function isValidUUID(id: string) {
       return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     }
@@ -465,10 +465,8 @@ export function MovieDetailModal({
     let movieId = movie.id;
 
     try {
-      // Wenn movie.id keine UUID ist, Film in Supabase anlegen
       if (!isValidUUID(movieId)) {
-        // Prüfe, ob Film mit tmdb_id schon existiert
-        let { data: existingMovies, error: movieFetchError } = await supabase
+        let { data: existingMovies } = await supabase
           .from('movies')
           .select('id')
           .eq('tmdb_id', movie.tmdb_id)
@@ -476,27 +474,16 @@ export function MovieDetailModal({
         if (existingMovies && existingMovies.id) {
           movieId = existingMovies.id;
         } else {
-          // Hole ggf. weitere Metadaten aus TMDb
-          let details = {};
-          try {
-            const { getTMDbDetails } = await import('@/lib/tmdbApi');
-            details = await getTMDbDetails(Number(movie.tmdb_id), movie.media_type || 'movie');
-          } catch (err) {
-            // Fallback: nur Basisdaten
-            details = {};
-          }
           const insertPayload: any = {
             title: movie.title,
-            description: movie.description || details.overview || null,
-            year: movie.year || (details.release_date ? Number((details.release_date as string).slice(0, 4)) : null),
-            poster_url: movie.poster_url || (details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null),
-            director: movie.director || (details as any).director || null,
-            actor: movie.actor || (details as any).actors || null,
-            trailer_url: movie.trailer_url || (details as any).trailerUrl || null,
+            description: movie.description || null,
+            year: movie.year || null,
+            poster_url: movie.poster_url || null,
+            director: movie.director || null,
+            actor: movie.actor || null,
+            trailer_url: movie.trailer_url || null,
             tmdb_id: movie.tmdb_id,
             media_type: movie.media_type || 'movie',
-            genre: Array.isArray((details as any).genres) ? (details as any).genres.map((g: any) => g.name) : null,
-            tmdb_keywords: (details as any).keywords || null,
           };
           const { data: newMovie, error: insertError } = await supabase
             .from('movies')
@@ -511,11 +498,7 @@ export function MovieDetailModal({
         }
       }
 
-      // Nach Sicherstellung der UUID: movieId für alle Folgeoperationen verwenden
-      // (Optional: movie.id im Modal-Objekt updaten, falls du willst)
-
-      // Check if user already rated this movie
-      const { data: existingRating, error: fetchError } = await supabase
+      const { data: existingRating } = await supabase
         .from('ratings')
         .select('id')
         .eq('movie_id', movieId)
@@ -523,7 +506,6 @@ export function MovieDetailModal({
         .single();
 
       if (existingRating) {
-        // Update existing rating
         const { error } = await supabase
           .from('ratings')
           .update({ rating })
@@ -535,7 +517,6 @@ export function MovieDetailModal({
           return;
         }
       } else {
-        // Create new rating
         const { error } = await supabase
           .from('ratings')
           .insert([
@@ -939,23 +920,12 @@ export function MovieDetailModal({
               <h4 className="text-sm font-medium text-gray-700 mb-3">
                 Deine Bewertung ({user.name}):
               </h4>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => handleStarClick(star)}
-                      className={`w-8 h-8 text-2xl transition-colors hover:scale-110 ${
-                        star <= userRating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                  <span className="ml-3 text-sm text-gray-600">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  <StarRating rating={userRating} onRate={handleStarClick} disabled={false} />
+                  <span className="text-sm text-gray-600">
                     {userRating > 0 ? `${userRating} Sterne` : 'Noch nicht bewertet'}
                   </span>
-                  {/* Delete rating button */}
                   {userRating > 0 && (
                     <button
                       onClick={handleDeleteRating}
@@ -1053,16 +1023,8 @@ export function MovieDetailModal({
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm text-gray-800">{review.user_name}</span>
                       <div className="flex items-center">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <span
-                            key={star}
-                            className={`text-lg ${
-                              star <= review.rating ? 'text-yellow-400' : 'text-gray-300'
-                            }`}
-                          >
-                            ★
-                          </span>
-                        ))}
+                        <StarRating rating={review.rating} onRate={() => {}} disabled={true} />
+                        <span className="text-sm text-gray-600 ml-2">{review.rating}</span>
                       </div>
                     </div>
                     {review.review_text && (

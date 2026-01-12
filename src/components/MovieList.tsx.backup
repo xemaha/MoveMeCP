@@ -8,7 +8,6 @@ import type { Movie, Tag } from '@/lib/types'
 import { loadPersonalRecommendations, mergeRecommendations } from '@/lib/personalRecommendations'
 import { generateRecommendations, calculatePredictedRatings } from '@/lib/recommendations'
 import TagDisplay from './TagDisplay'
-import { StarRating } from './StarRating'
 import { MovieDetailModal } from './MovieDetailModal'
 import type { DiscoveryFeature } from './DiscoveryFeatureFilter'
 
@@ -143,21 +142,6 @@ export function MovieList(props?: MovieListProps) {
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set())
   const [mergedRecommendations, setMergedRecommendations] = useState<any[]>([])
   const [discoverResults, setDiscoverResults] = useState<any[]>([])
-  const [dismissedDiscoveryIds, setDismissedDiscoveryIds] = useState<Set<string>>(new Set())
-    // Discovery: Lade dauerhaft verworfene Empfehlungen beim User-Wechsel
-    useEffect(() => {
-      const fetchDismissed = async () => {
-        if (!user) { setDismissedDiscoveryIds(new Set()); return; }
-        const { data, error } = await supabase
-          .from('dismissed_recommendations')
-          .select('movie_id')
-          .eq('user_id', user.id)
-        if (!error && data) {
-          setDismissedDiscoveryIds(new Set(data.map((row: any) => row.movie_id)))
-        }
-      }
-      fetchDismissed()
-    }, [user])
   const [isDiscoverLoading, setIsDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
 
@@ -698,14 +682,14 @@ export function MovieList(props?: MovieListProps) {
       return
     }
 
-    try {
-      // Ensure movie exists in Supabase (discover items may be tmdb-*)
-      const persistedId = await ensureMovieExists(movie)
-      if (!persistedId) {
-        alert('Konnte Film nicht speichern.')
-        return
-      }
+    // Ensure movie exists in Supabase (discover items may be tmdb-*)
+    const persistedId = await ensureMovieExists(movie)
+    if (!persistedId) {
+      alert('Konnte Film nicht speichern.')
+      return
+    }
 
+    try {
       const existingRating = await supabase
         .from('ratings')
         .select('*')
@@ -719,10 +703,7 @@ export function MovieList(props?: MovieListProps) {
           .update({ rating })
           .eq('id', existingRating.data.id as string)
           
-        if (error) {
-          console.error('Error updating rating:', error)
-          throw error
-        }
+        if (error) throw error
       } else {
         const { error } = await supabase
           .from('ratings')
@@ -733,10 +714,7 @@ export function MovieList(props?: MovieListProps) {
             user_name: user.name,
           }])
           
-        if (error) {
-          console.error('Error inserting rating:', error)
-          throw error
-        }
+        if (error) throw error
       }
 
       // Update local state
@@ -819,18 +797,12 @@ export function MovieList(props?: MovieListProps) {
   }
 
   const ensureMovieExists = async (movie: any): Promise<string | null> => {
-    if (!movie) {
-      console.error('ensureMovieExists: movie is null/undefined')
-      return null
-    }
+    if (!movie) return null
 
     // Already a persisted movie (not a tmdb placeholder)
     if (movie.id && typeof movie.id === 'string' && !movie.id.startsWith('tmdb-')) {
-      console.log('ensureMovieExists: Using existing movie ID:', movie.id)
       return movie.id
     }
-
-    console.log('ensureMovieExists: Need to create/find movie:', movie.title, movie.tmdb_id)
 
     // Versuche, tmdb_id zu holen und als String/Number zu akzeptieren
     let tmdbId = movie.tmdb_id
@@ -847,10 +819,7 @@ export function MovieList(props?: MovieListProps) {
           .eq('tmdb_id', tmdbId)
           .maybeSingle()
         existing = res.data
-        if (!res.error && existing?.id) {
-          console.log('ensureMovieExists: Found existing by tmdb_id:', existing.id)
-          return existing.id as string
-        }
+        if (!res.error && existing?.id) return existing.id as string
       }
 
       // Fallback: Suche per normalisiertem Titel, falls keine tmdb_id
@@ -863,10 +832,7 @@ export function MovieList(props?: MovieListProps) {
           .maybeSingle()
         if (!titleError && titleMatch?.id) fallbackId = titleMatch.id as string
       }
-      if (fallbackId) {
-        console.log('ensureMovieExists: Found existing by title:', fallbackId)
-        return fallbackId
-      }
+      if (fallbackId) return fallbackId
 
       // Hole alle Felder wie beim AddMovieForm, lasse optionale Felder weg
       const insertPayload: any = {
@@ -888,8 +854,6 @@ export function MovieList(props?: MovieListProps) {
         if (insertPayload[k] === undefined) delete insertPayload[k]
       })
 
-      console.log('ensureMovieExists: Inserting new movie:', insertPayload)
-
       const { data: upserted, error: upsertError } = await supabase
         .from('movies')
         .upsert(insertPayload, { onConflict: 'tmdb_id' })
@@ -898,16 +862,14 @@ export function MovieList(props?: MovieListProps) {
 
       if (upsertError) {
         console.error('Error upserting discover movie', upsertError, insertPayload)
-        alert('Fehler beim Speichern des Films: ' + (upsertError.message || 'Unbekannter Fehler'))
+        alert('Fehler beim Speichern des Films: ' + (upsertError.message || upsertError.details || 'Unbekannter Fehler'))
         return null
       }
 
-      console.log('ensureMovieExists: Created new movie:', upserted?.id)
       return upserted?.id as string
     } catch (err) {
       console.error('ensureMovieExists error', err, movie)
-      const errorMsg = err instanceof Error ? err.message : 'Unbekannter Fehler'
-      alert('Fehler beim Speichern des Films: ' + errorMsg)
+      alert('Fehler beim Speichern des Films: ' + (err?.message || err?.details || 'Unbekannter Fehler'))
       return null
     }
   }
@@ -1677,34 +1639,11 @@ export function MovieList(props?: MovieListProps) {
     }
   }
 
-  // Discovery: Filtere verworfene Empfehlungen raus
   const baseRecommendations = isDiscoverMode
-    ? discoverResults.filter(rec => {
-        const id = rec.movie.id || rec.movie.tmdb_id
-        return !dismissedDiscoveryIds.has(id)
-      })
+    ? discoverResults
     : isAIRecoMode
       ? aiCombinedResults
       : filterOutDismissed(recommendations)
-    // Discovery: X-Button zum dauerhaften Entfernen
-    const handleDismissDiscovery = async (rec: any) => {
-      if (!user) return
-      const movieId = rec.movie.id || rec.movie.tmdb_id
-      try {
-        // In DB speichern
-        const { error } = await supabase
-          .from('dismissed_recommendations')
-          .insert({ user_id: user.id, movie_id: movieId })
-        if (error && !String(error.message).includes('duplicate')) {
-          alert('Fehler beim Verwerfen: ' + (error.message || error.details))
-          return
-        }
-        setDismissedDiscoveryIds(prev => new Set(prev).add(movieId))
-        setDiscoverResults(prev => prev.filter(item => (item.movie.id || item.movie.tmdb_id) !== movieId))
-      } catch (err) {
-        alert('Fehler beim Verwerfen')
-      }
-    }
   const recommendationsLoading = isDiscoverMode
     ? isDiscoverLoading
     : isAIRecoMode
@@ -1750,19 +1689,9 @@ export function MovieList(props?: MovieListProps) {
                     })
                     .map((rec) => (
                       <div
-                        key={rec.movie.id || rec.movie.tmdb_id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative"
+                        key={rec.movie.id}
+                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
                       >
-                        {/* X-Button oben rechts */}
-                        {isDiscoverMode && (
-                          <button
-                            className="absolute top-2 right-2 z-10 text-gray-400 hover:text-red-500 text-xl font-bold bg-white/80 rounded-full w-8 h-8 flex items-center justify-center shadow"
-                            title="Empfehlung dauerhaft entfernen"
-                            onClick={e => { e.stopPropagation(); handleDismissDiscovery(rec); }}
-                          >
-                            ×
-                          </button>
-                        )}
                         <div onClick={() => setSelectedMovie(rec.movie)} className="cursor-pointer">
                           {/* Poster */}
                           {rec.movie.poster_url ? (
@@ -1823,31 +1752,31 @@ export function MovieList(props?: MovieListProps) {
                                 )}
                                 {/* Genres anzeigen, wenn gematcht */}
                                 {rec.matchReasons?.some((r: string) => r.includes('Genres')) && rec.movie.tags?.length > 0 && (
-                                  <>
-                                    <div className="text-xs text-blue-800 font-semibold mb-0.5">
-                                      🎞️ Genres: {rec.movie.tags.filter(t => t.color === '#e5e7eb').map(t => t.name).join(', ')}
-                                    </div>
-                                    {/* Keywords direkt unter Genre anzeigen, falls vorhanden */}
-                                    {rec.matchReasons?.some((r: string) => r.includes('Keyword')) && rec.movie.tags?.filter(t => t.id.startsWith('kw-')).length > 0 && (
-                                      <div className="text-xs font-semibold mb-0.5">
-                                        <span className="mr-1">🔑 Keywords:</span>
-                                        {rec.movie.tags.filter(t => t.id.startsWith('kw-')).map(t => (
-                                          <span
-                                            key={t.id}
-                                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-1 ${
-                                              t.color === '#10b981'
-                                                ? 'bg-green-200 text-green-900'
-                                                : t.color === '#fbbf24'
-                                                ? 'bg-yellow-200 text-yellow-900'
-                                                : 'bg-gray-200 text-gray-700'
-                                            }`}
-                                          >
-                                            {t.name}
-                                          </span>
-                                        ))}
-                                      </div>
+                                  <div className="text-xs text-blue-800 font-semibold mb-0.5">
+                                    🎞️ Genres: {rec.movie.tags.filter(t => t.color === '#e5e7eb').map(t => t.name).join(', ')}
+                                  </div>
+                                )}
+                                {/* Keywords anzeigen, wenn gematcht */}
+                                {rec.matchReasons?.some((r: string) => r.includes('Keyword')) && rec.movie.tags?.length > 0 && (
+                                  <div className="text-xs font-semibold mb-0.5">
+                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).length > 0 && (
+                                      <span className="mr-1">🔑 Keywords:</span>
                                     )}
-                                  </>
+                                    {rec.movie.tags.filter(t => t.id.startsWith('kw-')).map(t => (
+                                      <span
+                                        key={t.id}
+                                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-1 ${
+                                          t.color === '#10b981'
+                                            ? 'bg-green-200 text-green-900'
+                                            : t.color === '#fbbf24'
+                                            ? 'bg-yellow-200 text-yellow-900'
+                                            : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                      >
+                                        {t.name}
+                                      </span>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
                             )}
@@ -1909,7 +1838,30 @@ export function MovieList(props?: MovieListProps) {
                             )}
 
                             {/* Tags */}
-                            {/* KEINE allgemeine Tag/Keyword-Anzeige mehr */}
+                            {rec.movie.tags.length > 0 && (
+                              <TagDisplay tags={rec.movie.tags} />
+                            )}
+
+                            {/* Average Rating */}
+                            {rec.movie.averageRating > 0 && (
+                              <div className="flex items-center mb-3">
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-lg ${
+                                        star <= rec.movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="text-sm text-gray-600 ml-2">
+                                  {rec.movie.averageRating.toFixed(1)} ({rec.movie.ratingCount} Bewertungen)
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -2077,6 +2029,27 @@ export function MovieList(props?: MovieListProps) {
                             {/* Tags */}
                             {rec.movie.tags.length > 0 && (
                               <TagDisplay tags={rec.movie.tags} />
+                            )}
+
+                            {/* Average Rating */}
+                            {rec.movie.averageRating > 0 && (
+                              <div className="flex items-center mb-3">
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-lg ${
+                                        star <= rec.movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                                      }`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                                <span className="text-sm text-gray-600 ml-2">
+                                  {rec.movie.averageRating.toFixed(1)} ({rec.movie.ratingCount} Bewertungen)
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -2501,6 +2474,27 @@ export function MovieList(props?: MovieListProps) {
                     <TagDisplay tags={movie.tags} />
                   )}
 
+                  {/* Average Rating */}
+                  {movie.averageRating > 0 && (
+                    <div className="flex items-center mb-3">
+                      <div className="flex">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span
+                            key={star}
+                            className={`text-lg ${
+                              star <= movie.averageRating ? 'text-yellow-400' : 'text-gray-300'
+                            }`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-sm text-gray-600 ml-2">
+                        {movie.averageRating.toFixed(1)} ({movie.ratingCount} Bewertungen)
+                      </span>
+                    </div>
+                  )}
+
                   {/* Predicted Match - show if available and user hasn't rated yet */}
                   {showPredictions && predictedRatings.has(movie.id) && !movie.ratings.some(r => r.user_id === user?.id) && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
@@ -2515,32 +2509,38 @@ export function MovieList(props?: MovieListProps) {
               {/* User actions */}
               {user && (
                 <div className="p-4 bg-blue-50 border-t" onClick={(e) => e.stopPropagation()}>
-                  {/* Rating */}
-                  <div className="mb-3">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-700">
                       Deine Bewertung:
                     </h4>
-                    <div className="flex items-center gap-3">
-                      <StarRating 
-                        rating={getUserRating(movie.ratings, user.id)} 
-                        onRate={(rating) => handleRating(movie, rating)} 
-                        disabled={false} 
-                      />
-                      <span className="text-sm text-gray-600">
-                        {getUserRating(movie.ratings, user.id) > 0 
-                          ? `${getUserRating(movie.ratings, user.id)} Sterne` 
-                          : 'Noch nicht bewertet'}
-                      </span>
-                      {getUserRating(movie.ratings, user.id) > 0 && (
+                  </div>
+                  
+                  {/* Star rating */}
+                  <div className="flex items-center mb-3">
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const userRating = getUserRating(movie.ratings, user.id)
+                      return (
                         <button
-                          onClick={() => handleDeleteRating(movie.id)}
-                          className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
-                          title="Bewertung löschen"
+                          key={star}
+                          onClick={() => handleRating(movie, star)}
+                          className={`text-xl transition-colors hover:scale-110 ${
+                            star <= userRating ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-300'
+                          }`}
                         >
-                          ✕
+                          ★
                         </button>
-                      )}
-                    </div>
+                      )
+                    })}
+                    
+                    {getUserRating(movie.ratings, user.id) > 0 && (
+                      <button
+                        onClick={() => handleDeleteRating(movie.id)}
+                        className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-red-100 hover:text-red-600"
+                        title="Bewertung löschen"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
 
                   {/* Watchlist button */}
@@ -2604,6 +2604,18 @@ export function MovieList(props?: MovieListProps) {
                       
                       <TagDisplay tags={movie.tags} />
                     </div>
+                    
+                    {movie.averageRating > 0 && (
+                      <div className="text-right">
+                        <div className="flex items-center">
+                          <span className="text-yellow-400 mr-1">★</span>
+                          <span className="text-sm">{movie.averageRating.toFixed(1)}</span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {movie.ratingCount} Bewertung{movie.ratingCount !== 1 ? 'en' : ''}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2633,10 +2645,6 @@ export function MovieList(props?: MovieListProps) {
           onMovieUpdated={async () => {
             await loadMovies()
             await loadWatchlist()
-            // Discovery: Entferne bewerteten Film sofort aus Vorschlagsliste
-            setDiscoverResults(prev => prev.filter(
-              rec => rec.movie.id !== selectedMovie.id && rec.movie.tmdb_id !== (selectedMovie as any).tmdb_id
-            ))
             setSelectedMovie(null)
           }}
           hideWatchlistFeature={true}

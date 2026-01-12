@@ -111,19 +111,7 @@ export function MovieGrid() {
   }
 
   const handleAddRating = async (movieId: string, rating: number) => {
-    try {
-      const { error } = await supabase
-        .from('ratings')
-        .insert([{ movie_id: movieId, rating }])
-
-      if (error) throw error
-
-      // Refresh movies to show updated ratings
-      await fetchMoviesWithDetails()
-    } catch (error) {
-      console.error('Error adding rating:', error)
-      alert('Fehler beim Bewerten')
-    }
+    // Rating functionality removed - will be re-added with new component
   }
 
   const filteredMovies = movies.filter(movie => {
@@ -142,26 +130,6 @@ export function MovieGrid() {
     
     return false
   })
-
-  const renderStars = (rating: number, interactive: boolean = false, onRate?: (rating: number) => void) => {
-    return Array.from({ length: 5 }, (_, index) => {
-      const starValue = index + 1
-      return (
-        <button
-          key={index}
-          onClick={interactive && onRate ? () => onRate(starValue) : undefined}
-          disabled={!interactive}
-          className={`text-lg ${
-            interactive ? 'hover:text-yellow-400 cursor-pointer' : 'cursor-default'
-          } ${
-            starValue <= rating ? 'text-yellow-400' : 'text-gray-300'
-          }`}
-        >
-          ★
-        </button>
-      )
-    })
-  }
 
   if (isLoading) {
     return (
@@ -261,26 +229,6 @@ export function MovieGrid() {
               {movie.tags.length > 0 && (
                 <MovieTagsDisplay tags={movie.tags} />
               )}
-              
-              {/* Rating */}
-              <div className="space-y-2">
-                {movie.averageRating > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">⌀ Bewertung:</span>
-                    <div className="flex">{renderStars(movie.averageRating)}</div>
-                    <span className="text-sm text-gray-500">
-                      ({movie.averageRating.toFixed(1)}, {movie.ratingCount} {movie.ratingCount === 1 ? 'Bewertung' : 'Bewertungen'})
-                    </span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Bewerten:</span>
-                  <div className="flex">
-                    {renderStars(0, true, (rating) => handleAddRating(movie.id, rating))}
-                  </div>
-                </div>
-              </div>
             </div>
           ))}
         </div>
