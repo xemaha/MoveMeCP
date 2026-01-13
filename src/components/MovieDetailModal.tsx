@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase, Movie, Tag } from "@/lib/supabase";
 import { useUser } from "@/lib/UserContext";
 import { WatchProvidersDisplay } from "./WatchProvidersDisplay";
@@ -236,15 +236,15 @@ export function MovieDetailModal({
           let details = {};
           try {
             const { getTMDbDetails } = await import('@/lib/tmdbApi');
-            details = await getTMDbDetails(Number(movie.tmdb_id), movie.media_type || 'movie');
+            details = await getTMDbDetails(Number(movie.tmdb_id), (movie.media_type as 'movie' | 'tv') || 'movie');
           } catch (err) {
             details = {};
           }
           const insertPayload: any = {
             title: movie.title,
-            description: movie.description || details.overview || null,
-            year: movie.year || (details.release_date ? Number((details.release_date as string).slice(0, 4)) : null),
-            poster_url: movie.poster_url || (details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null),
+            description: movie.description || (details as any).overview || null,
+            year: movie.year || ((details as any).release_date ? Number(((details as any).release_date as string).slice(0, 4)) : null),
+            poster_url: movie.poster_url || ((details as any).poster_path ? `https://image.tmdb.org/t/p/w500${(details as any).poster_path}` : null),
             director: movie.director || (details as any).director || null,
             actor: movie.actor || (details as any).actors || null,
             trailer_url: movie.trailer_url || (details as any).trailerUrl || null,
@@ -685,15 +685,72 @@ export function MovieDetailModal({
     setWhatsAppRecipients([])
   }
 
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedElement = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Save previously focused element
+      previouslyFocusedElement.current = document.activeElement as HTMLElement;
+      // Focus modal
+      modalRef.current?.focus();
+      // Lock scroll
+      document.body.classList.add('overflow-hidden');
+    } else {
+      // Restore focus
+      previouslyFocusedElement.current?.focus();
+      // Unlock scroll
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
+  // Trap focus inside modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!focusable.length) return;
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50"
       onClick={onClose}
+      aria-modal="true"
+      role="dialog"
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full sm:max-w-2xl h-full overflow-y-auto flex flex-col"
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-white rounded-lg shadow-xl w-full sm:max-w-2xl h-full overflow-y-auto flex flex-col outline-none pb-[72px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 sm:p-6 flex-1 flex flex-col">
