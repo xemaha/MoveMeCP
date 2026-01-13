@@ -2491,17 +2491,26 @@ export function MovieList(props?: MovieListProps) {
                         href={movie.trailer_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs font-medium gap-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        🎬 Trailer ansehen
+                        <img src="/buttons/04_trailer.png" alt="YouTube Trailer" className="h-7 w-auto" />
                       </a>
                     </div>
                   )}
 
+
                   {/* Tags */}
                   {movie.tags.length > 0 && (
                     <TagDisplay tags={movie.tags} />
+                  )}
+
+                  {/* Durchschnittliche Bewertung kompakt anzeigen */}
+                  {typeof movie.averageRating === 'number' && movie.ratingCount > 0 && (
+                    <div className="mb-2 flex flex-col items-start">
+                      <div className="mt-4" />
+                      <StarRating rating={movie.averageRating} disabled={true} size={12} />
+                      <span className="text-xs text-gray-500 mt-1">{movie.averageRating.toFixed(1)} von {movie.ratingCount} Bewertungen</span>
+                    </div>
                   )}
 
                   {/* Predicted Match - show if available and user hasn't rated yet */}
