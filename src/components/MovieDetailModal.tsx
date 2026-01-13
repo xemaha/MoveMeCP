@@ -1071,6 +1071,11 @@ export function MovieDetailModal({
               <h4 className="text-sm font-semibold text-gray-800 mb-4">
                 Bewertungen anderer Nutzer:
               </h4>
+              {typeof movie.averageRating === 'number' && movie.ratingCount > 0 && (
+                <div className="mb-4">
+                  <StarRating rating={movie.averageRating} disabled={true} size={18} />
+                </div>
+              )}
               <div className="space-y-3">
                 {otherReviews.map((review, index) => (
                   <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
@@ -1087,14 +1092,6 @@ export function MovieDetailModal({
                   </div>
                 ))}
               </div>
-              {/* Durchschnittliche Bewertung anzeigen (jetzt unterhalb der anderen Bewertungen) */}
-              {typeof movie.averageRating === 'number' && movie.ratingCount > 0 && (
-                <div className="mt-6 flex items-center gap-2">
-                  <span className="text-base font-semibold text-gray-700">Durchschnittliche Bewertung:</span>
-                  <StarRating rating={movie.averageRating} disabled={true} />
-                  <span className="text-sm text-gray-500">({movie.averageRating.toFixed(1)} von {movie.ratingCount} Bewertungen)</span>
-                </div>
-              )}
             </div>
           )}
 
