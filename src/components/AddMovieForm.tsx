@@ -229,12 +229,15 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
     setSelectedMovie(suggestion);
     setTitle(suggestion.title);
     // Nur setzen, wenn nicht direkt danach eine TMDb-Auswahl kommt
-    if (!tmdbSelected) {
-    setContentType(suggestion.content_type as 'film' | 'serie' | 'buch');
-    }
     setShowSuggestions(false);
     setTmdbSelected(false); // Reset, falls wieder Supabase gewählt wird
+        if (!tmdbSelected && !userHasManuallySelectedType) {
+          setContentType(suggestion.content_type as 'film' | 'serie' | 'buch');
+        }
+        setShowSuggestions(false);
+        setTmdbSelected(false); // Reset, falls wieder Supabase gewählt wird
   }
+  const [userHasManuallySelectedType, setUserHasManuallySelectedType] = useState(false)
 
   // Simuliert einen Klick außerhalb des Dropdowns
   const simulateClickOutside = () => {
@@ -341,8 +344,7 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
               year: year ? Number(year) : null,
               genre: genre || null,
               trailer_url: trailerUrl || null,
-              tmdb_id: (selectedMovie as any)?.id || null,
-              content_type: (selectedMovie as any)?.media_type === 'tv' ? 'serie' : 'film',
+              tmdb_id: (selectedMovie as any)?.id || null
             },
           ])
           .select()
@@ -801,7 +803,10 @@ export default function AddMovieForm({ selectedContentType, onMovieAdded }: AddM
         <select
           id="contentType"
           value={contentType}
-          onChange={(e) => setContentType(e.target.value as 'film' | 'serie' | 'buch')}
+          onChange={(e) => {
+            setContentType(e.target.value as 'film' | 'serie' | 'buch');
+            setUserHasManuallySelectedType(true);
+          }}
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           disabled={isLoading}
         >
